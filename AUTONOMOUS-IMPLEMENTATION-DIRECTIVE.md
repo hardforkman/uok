@@ -28,7 +28,15 @@ CLI/Desktop, Cursor, Codex CLI/IDE, or other). Evidence: your own tool
 inventory, config directories present (`.claude/`, `.qoder/`, `.cursor/`,
 `.codex/`), CLI availability (`command -v claude qoder cursor-agent codex`),
 environment variables. If none matches, use
-[adapters/universal/README.md](adapters/universal/README.md).
+[adapters/universal/README.md](adapters/universal/README.md) and build your
+own adapter per ADAPTER-IMPLEMENTATION-SPEC.md. **Reference implementations:
+`adapters/claude-code` and `adapters/qoder`** (both `integration_tested`,
+live 2026-11-17) — use them as the working example of adapter structure,
+installer, hook wiring and PROFILE evidence, and their handoff reports
+(`handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`,
+`handoff/INSTALLATION-REPORT-qoder-2026-11-17.md`) as the evidence bar.
+Copy the pattern, not host-specific facts: probe YOUR environment and record
+only what you actually verified.
 
 ## Step 2 — Inspect existing configuration
 
@@ -80,7 +88,9 @@ environment requires approval for config changes, request it here.
 
 If your adapter ships an installer (`adapters/<env>/install.py`), run it with
 `--dry-run`, review the plan, then run it; it covers steps 8-12 and prints what
-it changed and verified. Otherwise create the adapter artifacts manually.
+it changed and verified. Otherwise create the adapter artifacts manually,
+using `adapters/claude-code` and `adapters/qoder` (integration_tested) as
+reference implementations for structure and hook wiring.
 
 Create the adapter artifacts in the target project/user config:
 - instruction-file section or rules that bind the agent to this kit's

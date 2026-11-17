@@ -30,6 +30,22 @@ Every factual claim about the environment MUST carry a verification status
 not confirmed is `unverified`/`unknown`/`not_found` — never stated as fact.
 Each adapter SHOULD also ship a `PROFILE.yaml` capability matrix (format §3).
 
+## 1a. Reference implementations
+
+When you build an adapter for a new environment, start from the two adapters that
+passed live verification: `adapters/claude-code` and `adapters/qoder` (both
+`integration_tested`, 2026-11-17). Copy the pattern, not host-specific facts:
+
+- structure: README with the 13 sections, PROFILE.yaml, `install.py` on top of `adapters/shared/`
+  (`uok_install.py` core plus the G1 hook with a `--format` for your host);
+- hook wiring and the install order: the hook file exists before the host config points to it;
+- evidence bar: their handoff reports (`handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`,
+  `handoff/INSTALLATION-REPORT-qoder-2026-11-17.md`) show what "verified_live" looks like:
+  the exact command or event, the observed output, and the log line.
+
+Probe your own environment (§2) and record only what you verified there. An adapter
+that has not repeated those live checks stays `implementation_available`.
+
 ## 2. Environment discovery procedure (generic)
 
 The receiving agent performs, read-only:

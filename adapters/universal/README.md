@@ -9,6 +9,13 @@ is also the degradation target when a dedicated adapter's native features
 are unavailable. It assumes only: file read/write, and optionally shell
 execution and/or a model API. Everything else is optional and probed.
 
+**Reference implementations:** when building an adapter for your environment,
+use `adapters/claude-code` and `adapters/qoder` (both `integration_tested`,
+live 2026-11-17) as the working example of structure, installer, hook wiring
+and PROFILE evidence; their handoff reports are the evidence bar. Copy the
+pattern, not host-specific facts — probe your own environment per §1 and
+record only what you actually verified.
+
 ## 1. Environment discovery
 
 1. Inventory actual capabilities: Can you dispatch a second agent/session?
