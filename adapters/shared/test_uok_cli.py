@@ -98,7 +98,8 @@ class UokCliTest(unittest.TestCase):
                 self.assertIn("uok init", fm["description"])
                 self.assertIn(MARK, fm["description"])
                 self.assertIn(f"--host {host}", body)
-                self.assertIn(KIT, body)
+                self.assertIn("cat ~/.uok/location", body)   # path is read from the pointer, not embedded
+                self.assertNotIn(KIT, body)
                 self.assertIn("--dry-run", body)
 
     def test_bootstrap_idempotent(self):
@@ -143,6 +144,57 @@ class UokCliTest(unittest.TestCase):
         self.assertTrue(self.skill_path("qoder").exists())
         for host in ("claude-code", "cursor", "codex"):
             self.assertFalse(self.skill_path(host).exists())
+
+
+class SharedKitRelocationTest(unittest.TestCase):
+    """Kit in a shared folder: projects store <kit>, the real path lives in ~/.uok/location only."""
+
+    def setUp(self):
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.shared = Path(os.path.realpath(self.tmp / "shared" / "UNIVERSAL-ORCHESTRATOR-KIT"))
+        shutil.copytree(KIT, self.shared, ignore=shutil.ignore_patterns("__pycache__", "backups"))
+        self.proj = Path(os.path.realpath(self.tmp)) / "proj"
+        self.proj.mkdir()
+        (self.proj / "src").mkdir()
+        (self.proj / "src" / "app.py").write_text("x = 1\n")
+        self.env = dict(os.environ, HOME=str(self.home), PYTHONDONTWRITEBYTECODE="1")
+
+    def run_kit(self, kit, args, cwd):
+        return subprocess.run([sys.executable, str(kit / "uok"), *args], capture_output=True, text=True,
+                              env=self.env, cwd=str(cwd), timeout=900)
+
+    def pointer(self):
+        return (self.home / ".uok" / "location").read_text().strip()
+
+    def test_project_stores_placeholder_not_path(self):
+        r = self.run_kit(self.shared, ["init", "--host", "claude-code", "--project", str(self.proj)], self.proj)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.pointer(), str(self.shared))
+        claude = (self.proj / "CLAUDE.md").read_text()
+        self.assertIn("`<kit>/core/", claude)
+        self.assertNotIn(str(self.shared), claude)
+        self.assertIn('kit_dir: "<kit>"', (self.proj / ".orchestrator" / "policy" / "claude-code.yaml").read_text())
+        self.assertNotIn(str(self.shared), (self.proj / ".orchestrator" / "policy" / "claude-code.yaml").read_text())
+
+    def test_move_then_locate_updates_only_pointer(self):
+        self.run_kit(self.shared, ["init", "--host", "claude-code", "--project", str(self.proj)], self.proj)
+        before = (self.proj / "CLAUDE.md").read_text()
+        moved = Path(os.path.realpath(self.tmp)) / "elsewhere" / "UNIVERSAL-ORCHESTRATOR-KIT"
+        moved.parent.mkdir()
+        shutil.move(str(self.shared), str(moved))
+        r = self.run_kit(moved, ["locate"], moved)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.pointer(), str(moved))
+        self.assertEqual((self.proj / "CLAUDE.md").read_text(), before, "project files must not change on locate")
+
+    def test_bootstrap_skill_reads_pointer_not_path(self):
+        self.run_kit(self.shared, ["bootstrap", "--host", "claude-code"], self.shared)
+        skill = (self.home / ".claude" / "skills" / "uok-init" / "SKILL.md").read_text()
+        self.assertIn("cat ~/.uok/location", skill)
+        self.assertNotIn(str(self.shared), skill)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,17 @@ except ImportError:
 
 SHARED = os.path.dirname(os.path.realpath(__file__))
 KIT = os.path.dirname(os.path.dirname(SHARED))
+# Where the kit lives on this machine. Project files never embed the path: they say `<kit>`,
+# and this file holds the real folder. Moving the kit = run `uok locate` from its new place.
+POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
+
+
+def write_pointer(dry_run):
+    if dry_run:
+        return
+    os.makedirs(os.path.dirname(POINTER), exist_ok=True)
+    with open(POINTER, "w", encoding="utf-8") as f:
+        f.write(KIT + "\n")
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 ROLE_MARK = "(Universal Orchestrator Kit role)"
@@ -79,9 +90,10 @@ class BaseInstaller:
         self.backup_dir = os.path.join(self.root, ".orchestrator", "backups", self.ts)
         self.changes, self.kept, self.warnings, self.degradations = [], [], [], []
         rel = os.path.relpath(KIT, self.root)
-        self.kit_rel = rel if not rel.startswith("..") else KIT
+        self.kit_rel = rel if not rel.startswith("..") else "<kit>"
         if rel.startswith(".."):
-            self.warnings.append(f"kit lives outside the project ({KIT}); its files are not write-protected")
+            self.warnings.append(f"kit lives outside the project; <kit> = the folder in ~/.uok/location; "
+                                 "its files are not write-protected")
 
     # ---------- helpers
     def p(self, *parts):
@@ -203,7 +215,8 @@ class BaseInstaller:
             f"{MARK_BEGIN} (Universal Orchestrator Kit {KIT_VERSION}, {self.HOST} adapter, enforcement: {self.mode}) -->",
             "## Universal Orchestrator Kit", "",
             f"Kit: `{k}/` (spec, routing policy, contracts). Installed policy: `.orchestrator/policy/`. "
-            "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored).", "",
+            "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored)."
+            + (" `<kit>` is the kit folder recorded in `~/.uok/location`." if k == "<kit>" else ""), "",
             self.workers_line(), "",
             *([skill_line, ""] if skill_line else []),
             "Rules:",
@@ -313,6 +326,7 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
         for step in (self.step_dirs, self.step_hooks, self.step_policy, self.host_steps, self.step_skill,
                      self.step_ignores, self.register_hook):   # the hook file exists before the host config points to it
             step()
+        write_pointer(self.dry)
         results = self.verify()
         print(f"Universal Orchestrator Kit {KIT_VERSION} — {self.HOST} adapter "
               f"({'DRY RUN' if self.dry else 'installed'}) into {self.root}")

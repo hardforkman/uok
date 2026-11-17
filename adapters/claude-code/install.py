@@ -38,6 +38,7 @@ except ImportError:
 
 ADAPTER = os.path.dirname(os.path.realpath(__file__))
 KIT = os.path.dirname(os.path.dirname(ADAPTER))
+POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
 PAYLOAD = os.path.join(os.path.dirname(ADAPTER), "shared")
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
@@ -67,9 +68,10 @@ class Installer:
         self.backup_dir = os.path.join(self.root, ".orchestrator", "backups", self.ts)
         self.changes, self.kept, self.warnings = [], [], []
         rel = os.path.relpath(KIT, self.root)
-        self.kit_rel = rel if not rel.startswith("..") else KIT   # kit outside the project: absolute
+        self.kit_rel = rel if not rel.startswith("..") else "<kit>"   # outside: placeholder, path in ~/.uok/location
         if rel.startswith(".."):
-            self.warnings.append(f"kit lives outside the project ({KIT}); its files are not write-protected")
+            self.warnings.append("kit lives outside the project; <kit> = the folder in ~/.uok/location; "
+                                 "its files are not write-protected")
 
     # ---------- helpers
     def p(self, *parts):
@@ -240,7 +242,8 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
             f"{MARK_BEGIN} (Universal Orchestrator Kit {KIT_VERSION}, Claude Code adapter, enforcement: {self.mode}) -->",
             "## Universal Orchestrator Kit", "",
             f"Kit: `{self.kit_rel}/` (spec, routing policy, contracts). Installed policy: `.orchestrator/policy/`. "
-            "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored).", "",
+            "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored)."
+            + (" `<kit>` is the kit folder recorded in `~/.uok/location`." if self.kit_rel == "<kit>" else ""), "",
             "The main session is the **orchestrator**; workers are the subagents `uok-*` in `.claude/agents/` "
             f"(one per role in `{self.kit_rel}/core/AGENT-CAPABILITIES.yaml`).", "",
             "The user can launch orchestration with `/uok <task>` (skill `.claude/skills/uok/SKILL.md`); "
@@ -355,6 +358,10 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
         for step in (self.step_dirs, self.step_hooks, self.step_policy, self.step_agents, self.step_skill,
                      self.step_claude_md, self.step_ignores, self.step_settings):
             step()
+        if not self.dry:
+            os.makedirs(os.path.dirname(POINTER), exist_ok=True)
+            with open(POINTER, "w", encoding="utf-8") as f:
+                f.write(KIT + "\n")
         results = self.verify()
         print(f"Universal Orchestrator Kit {KIT_VERSION} — Claude Code adapter "
               f"({'DRY RUN' if self.dry else 'installed'}) into {self.root}")

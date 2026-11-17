@@ -163,7 +163,7 @@ KIT_DIR = _cfg("kit_dir", "UNIVERSAL-ORCHESTRATOR-KIT").strip("/").lower()
 PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".agents/", ".git/", ".orchestrator/",
              "claude.md", "claude.local.md",
              "agents.md", "agents.local.md", ".mcp.json", ".gitignore") \
-    + (() if os.path.isabs(KIT_DIR) or KIT_DIR.startswith("..") else
+    + (() if not KIT_DIR or os.path.isabs(KIT_DIR) or KIT_DIR.startswith(("..", "<")) else
        (KIT_DIR + "/validation/", KIT_DIR + "/core/", KIT_DIR + "/adapters/"))
 # File names protected at any depth (nested CLAUDE.md files are loaded as instructions; round 6, item 3).
 PROTECTED_NAMES = ("claude.md", "claude.local.md", "agents.md", "agents.local.md", ".mcp.json", "settings.json",
