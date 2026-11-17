@@ -61,15 +61,35 @@ Assertions per scenario (actual behavior, not doc presence):
   record covering exactly the declared operations.
 - **TS-10** envelopes rejected for: wrong project, ungranted cross-project
   artifact, secret-like content; accepted with a valid scoped grant.
+  Regression: envelope-embedded grants are never trusted (receiver-held
+  registry only); expired grants and whole-project/wildcard scopes rejected.
 - **TS-11** identical write claims ⇒ `can_parallel == false`; second claim
   acquisition raises ClaimConflict.
 - **TS-12** universal profile (no verified native capabilities) ⇒ fallback
   environment selected with `degraded_multi_agent`, `degraded_parallelism`,
   `degraded_model_routing` flags; concurrency=1 kernel blocks a second
-  simultaneous EXECUTING task.
+  simultaneous EXECUTING task. Regression: doc-only-verified adapter
+  (codex profile) adds `doc_only_verification`; live-verified adapter
+  (claude-code profile) does not.
 
-Authoring-time result (2026-11-16): **28/28 checks passed** (re-run recorded
-in the installation report / final handoff).
+Audit regression checks (added 2026-11-17 after independent review):
+
+- **TS-02/03** CAT-08 with all-high modifiers stays TIER-4 (no ladder
+  overflow); `requested_tier: TIER-5` without review clamps to TIER-4.
+- **TS-05** dependency cycles rejected at DECOMPOSED; incomplete dependency
+  blocked without an explicit human waiver, allowed with one; FAILED child
+  blocks parent COMPLETED unless a human `partial_acceptance` waiver covers it.
+- **TS-07** fallback chain progresses through consumed steps
+  (same_tier_alternative → escalate_tier → human_escalation), never loops.
+- **TS-08** reviewer instance differs from implementer instance;
+  same-family-only reviewer pool flagged `degraded_independence`; G3 verdict
+  with evidence required at COMPLETED for high-impact tasks; explicit human
+  review waiver substitutes.
+- **TS-09** CAT-07 with a write claim requires approval (read-only does not);
+  expired approvals and empty-operations approvals are invalid.
+
+Authoring-time result (2026-11-17, post-audit): **51/51 checks passed**
+(re-run recorded in the installation report / final handoff).
 
 ## 3. Live compatibility probes (receiving agent executes)
 

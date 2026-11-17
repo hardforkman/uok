@@ -98,7 +98,17 @@ real permissions. Otherwise mark `not_implemented` with the reason.
    rules 1-5, supports `--dry-run`, never embeds machine-specific absolute
    paths in committed policy, installs any hook script before registering it,
    and runs the adapter's self-checks. Re-running it is the upgrade path.
-7. Installation itself obeys SEC-07: modifying credential/access-control
+7. Where the host has a native skill/command mechanism, the installer SHOULD
+   create a launcher skill (`uok`) that starts the orchestration lifecycle
+   (`/uok <task>`; Codex: `$uok` mention). Record the mechanism's verification
+   status in PROFILE.yaml; never overwrite a user-authored skill of the same
+   name; protect the skill file from worker writes like other host config.
+8. The kit SHOULD offer a primary installation command (`uok init`) usable
+   from a project session: a one-time bootstrap registers a user-level
+   `uok-init` skill in the host's global skills directory (verified_doc per
+   host), which runs the installer for the current project. Bootstrap obeys
+   rules 1-4 as well (additive, backups, user files preserved).
+9. Installation itself obeys SEC-07: modifying credential/access-control
    config or anything production-affecting needs explicit human approval.
 
 ## 6. Verification requirements (ADP-03)

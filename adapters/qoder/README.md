@@ -1,6 +1,6 @@
 # Adapter: Qoder (CLI / Desktop)
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: implementation_available
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: integration_tested (live, 2026-11-17)
 Research date: 2026-11-16 · Sources: docs.qoder.com (official)
 Status tags as in ADAPTER-IMPLEMENTATION-SPEC §1.
 
@@ -134,21 +134,31 @@ Instruction/memory files [verified_doc: docs.qoder.com/cli/memory]:
   config + hooks, and do not claim sandboxing.
 - Desktop vs CLI vs headless capability drift: verify each mode used.
 - Background agents require the feature to be enabled.
+- Auto permission mode: the host classifier may block sensitive commands
+  before the G1 `ask` reaches the human (observed live 2026-11-17,
+  `git push --force` probe). To verify the human-approval round-trip, run
+  the session in a prompt-surfacing mode (default), not Auto.
 
 ## 12. Installation procedure
 
-Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+Primary path: type `uok init` (or `/uok-init`) in the project session — the user-level `uok-init`
+skill (registered once by `python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`; user skills live in
+`~/.qoder/skills/` and apply to all projects [verified_doc: docs.qoder.com/cli/Skills]) runs
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init --host qoder`, which dispatches to this installer.
+
+Direct invocation from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
 
 ```bash
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/qoder/install.py --dry-run
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/qoder/install.py --models tier1=lite,tier2=efficient,tier3=performance,review=performance
 ```
 
-It writes `.qoder/agents/uok-<role>.md` (name, description, tools, `disallowedTools` for read-only roles, `model`, `permissionMode: default`). It also writes the marked section in `AGENTS.md`, `.qoder/rules/uok.md` (`trigger: always_on`), `.orchestrator/` with policy files, and the shared G1 hook. It registers PreToolUse in `.qoder/settings.json` with `--format qoder`. User agents with the same name are left untouched and reported. The hook uses Qoder's Claude-compatible event schema [verified_doc: docs.qoder.com/cli/hooks]; the root is resolved via `git rev-parse` at run time. Probe your model selectors before passing `--models`. Restart the Qoder session afterwards.
+It writes `.qoder/agents/uok-<role>.md` (name, description, tools, `disallowedTools` for read-only roles, `model`, `permissionMode: default`). It also writes the marked section in `AGENTS.md`, `.qoder/rules/uok.md` (`trigger: always_on`), the launcher skill `.qoder/skills/uok/SKILL.md` (invoke with `/uok <task>` [verified_doc: docs.qoder.com/cli/Skills]), `.orchestrator/` with policy files, and the shared G1 hook. It registers PreToolUse in `.qoder/settings.json` with `--format qoder`. User agents and user skills with the same name are left untouched and reported. The hook uses Qoder's Claude-compatible event schema [verified_doc: docs.qoder.com/cli/hooks]; the root is resolved via `git rev-parse` at run time. Probe your model selectors before passing `--models`. Restart the Qoder session afterwards.
 
 ## 13. Verification procedure
 
 - Level 2: files re-read; subagent visible (`@uok-…` mention resolves);
+  `/uok` appears in the skill list and expands the orchestrator prompt;
   user config intact (diff backups).
 - Level 3 safe probes: dispatch read-only `uok-research_analyst` via
   `qoder -p`; verify isolated result; probe hook denial with a scratch

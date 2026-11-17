@@ -84,6 +84,9 @@ route(task, registry, agents, policy, project):
      model_id and agent_instance_id; prefer a different model family.
  12. Approval: if task.sensitive_operations ∩ policy.approval.sensitive_operations
      ≠ ∅ or category = CAT-07 with mutating intent ⇒ requires_approval = true.
+     Mutating intent is defined as: the task declares at least one
+     `resource_claims` entry with `mode: write`. A read-only CAT-07 task
+     (audit, assessment) does not require approval by this clause alone.
  13. Execution environment ← adapter capability matrix (native subagent,
      worktree-isolated agent, headless CLI, external runtime). Record choice.
  14. Emit decision record (RT-06): inputs, tier, model, role, tools, environment,

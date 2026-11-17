@@ -55,7 +55,7 @@ STATUSES = {"unknown", "unverified", "verified_doc", "verified_local",
             "verified_live", "not_found"}
 EXPECTED_SCHEMAS = {
     "task", "resource_claim", "routing_decision", "lifecycle_event",
-    "gate_result", "approval_record", "result_payload",
+    "gate_result", "approval_record", "waiver", "result_payload",
     "agent_register", "status_update", "error_report", "escalation",
     "validation_verdict", "context_envelope", "cross_project_grant",
     "final_handoff",

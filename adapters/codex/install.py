@@ -8,6 +8,8 @@ Installs, additively and idempotently (backups in .orchestrator/backups/<ts>/):
   - .orchestrator/ working tree, policy files, shared G1 hook (copied before it is registered);
   - .codex/agents/uok_<role>.toml custom agents (name, description, developer_instructions,
     optional model; shell disabled for shell=none roles);
+  - .agents/skills/uok/SKILL.md — user launcher: $uok mention (Codex skills are invoked with $,
+    not /; custom prompts are deprecated) [verified_doc: learn.chatgpt.com/docs/build-skills];
   - AGENTS.md marked section;
   - PreToolUse hook in .codex/hooks.json (merged; user hooks kept) -> G1 guard --format codex.
 Codex specifics [verified_doc: learn.chatgpt.com/docs/hooks, /docs/agent-configuration/subagents]:
@@ -30,6 +32,7 @@ def toml_str(s):
 
 class CodexInstaller(core.BaseInstaller):
     HOST, FORMAT, INSTRUCTION_FILE = "codex", "codex", "AGENTS.md"
+    SKILL_DIR, SKILL_INVOKE = ".agents/skills/uok", "$uok"
 
     def __init__(self, *a):
         super().__init__(*a)
@@ -82,7 +85,8 @@ class CodexInstaller(core.BaseInstaller):
     def next_steps(self):
         return ("next: open the project in Codex, trust the project `.codex/` layer, review and trust the G1 hook with "
                 "`/hooks`, then run the live checks in the adapter README and fill "
-                f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md.")
+                f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md. "
+                "Launch orchestration with the `$uok` skill mention.")
 
 
 if __name__ == "__main__":

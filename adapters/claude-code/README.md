@@ -97,7 +97,7 @@ reports it (NS-10).
   `.orchestrator/hooks/` while a session is open.
 - In headless mode an `ask` has no human, so the call is not run [verified_live].
 - The kit's G1 guard: `payload/hooks/g1_guard.py`, documented in `payload/hooks/README.md`
-  (modes `standard` / `strict`, 114 tests).
+  (modes `standard` / `strict`, 123 tests).
 
 ## 10. External API integration
 
@@ -108,8 +108,10 @@ reports it (NS-10).
 
 ## 11. Limitations
 
-- The subagent nesting depth is limited; the orchestrator is the main session and workers do not
-  spawn orchestrators.
+- The subagent nesting depth is limited, but the exact default is unverified:
+  published sources conflict (docs describe no nested dispatch; changelog
+  entries mention deeper nesting) [unverified]. The orchestrator is the main
+  session and workers do not spawn orchestrators.
 - WebFetch/WebSearch are not covered by the hook matcher.
 - A hook timeout is believed to be a non-blocking error (the call proceeds) [unverified]; no
   known input brings the G1 guard near its 30 s timeout.
@@ -117,6 +119,13 @@ reports it (NS-10).
   search and need exact paths in their brief.
 
 ## 12. Installation procedure
+
+Primary path: `uok init` in the session (user-level `uok-init` skill, registered once by
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`; personal skills live in `~/.claude/skills/`
+[verified_doc: code.claude.com/docs/en/skills]). The CLI dispatches to this installer:
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init --host claude-code [--project DIR] [flags]`.
+
+Direct invocation:
 
 `install.py [--project DIR] [--mode standard|strict] [--models tier1=…,tier2=…,tier3=…,review=…] [--dry-run]`
 
@@ -129,6 +138,9 @@ reports it (NS-10).
    - writes the policy files (`.orchestrator/policy/project.yaml`, `models.yaml`, `agents.yaml`,
      `claude-code.yaml`), keeping existing ones;
    - writes the `uok-*` agents and the CLAUDE.md section;
+   - writes the launcher skill `.claude/skills/uok/SKILL.md` — the user runs `/uok <task>`
+     (`argument-hint: "[task]"`, `disable-model-invocation: true`, `$ARGUMENTS` carries the task)
+     [verified_doc: code.claude.com/docs/en/skills]; a user-authored `uok` skill is kept untouched;
    - merges `.claude/settings.json`: adds the hook and the deny/ask rules, keeps everything else;
    - adds the ignore entries;
    - runs the hook test suite and a smoke event.
@@ -140,6 +152,7 @@ Default mode is `standard`. Use `strict` only when workers must be sandboxed.
 
 - Level 2: the installer's summary shows `hook test suite: OK` and `smoke event … PASS`.
 - Level 3 (new session):
+  - `/uok <small read-only task>` expands the skill and runs the kit lifecycle;
   - dispatch `uok-research-analyst` read-only and confirm the result;
   - have a worker attempt a write to `.claude/settings.json` (must be denied);
   - with a claims file, a write outside the claim must be denied;

@@ -44,6 +44,8 @@ fields:
   timeout_seconds:    { type: integer, required: false, rules: "> 0; tier defaults in EXECUTION-LIFECYCLE.md §3" }
   resource_claims:    { type: array, required: false, default: [], items_schema: resource_claim, rules: "write claims must be disjoint across concurrent tasks (LC-03/04)" }
   requires_approval:  { type: boolean, required: false, default: false }
+  require_independent_review: { type: boolean, required: false, default: false, rules: "forces G3 review verdict at COMPLETED (QA-01); also implied by failure_impact=high or CAT-07" }
+  waivers:            { type: array, required: false, default: [], items_schema: waiver, rules: "explicit human waivers only; never implicit (EXECUTION-LIFECYCLE.md §8)" }
   approvals:          { type: array, required: false, default: [], items_schema: approval_record }
   routing:            { type: object, required: false, schema_ref: routing_decision, rules: "required from ROUTED onward" }
   routing_history:    { type: array, required: false, default: [], items_schema: routing_decision }
@@ -78,6 +80,7 @@ fields:
   flags:             { type: array, items: string, required: false, default: [], rules: "e.g. unverified_model, unknown_capability, tier_escalated, degraded_independence" }
   rationale:         { type: string, required: true }
   decision:          { type: string, required: false, allowed: [route, human_escalation], default: route }
+  requires_approval: { type: boolean, required: true, rules: "computed at routing (SEC-07); true ⇒ EXECUTING blocked until a valid, unexpired approval_record covers every sensitive operation" }
 ```
 
 ```yaml
@@ -113,6 +116,18 @@ fields:
   granted_at:  { type: string, required: true }
   expires_at:  { type: string, required: false }
   scope_note:  { type: string, required: false }
+```
+
+```yaml
+schema: waiver
+schema_version: 1
+fields:
+  scope:      { type: string, required: true, allowed: [dependency, review, partial_acceptance], rules: "what the waiver substitutes; never isolation/redaction/sensitive-ops" }
+  approver:   { type: string, required: true, rules: "human identity; agent-issued waivers are invalid" }
+  covers:     { type: array, items: string, required: false, default: [], rules: "task_ids covered (dependency/partial_acceptance); empty for review scope" }
+  granted_at: { type: string, required: true }
+  expires_at: { type: string, required: false, rules: "past or unparseable expiry invalidates the waiver" }
+  reason:     { type: string, required: false }
 ```
 
 ```yaml

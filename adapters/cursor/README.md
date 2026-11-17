@@ -108,20 +108,26 @@ or `not_found`. Treat this adapter as discovery-heavy: audit before binding.
 
 ## 12. Installation procedure
 
-Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+Primary path: type `uok init` (or `/uok-init`) in the project session — the user-level `uok-init`
+skill (registered once by `python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`; global skills live in
+`~/.cursor/skills/` [verified_doc: cursor.com/docs/agent/chat/commands]) runs
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init --host cursor`, which dispatches to this installer.
+
+Direct invocation from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
 
 ```bash
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/cursor/install.py --dry-run
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/cursor/install.py
 ```
 
-It writes the marked section in `AGENTS.md`, `.cursor/rules/uok-orchestrator.mdc` (`alwaysApply: true`), and one `.cursor/rules/uok-role-<role>.mdc` per role (Agent Requested by description). It also writes `.orchestrator/` with policy files and the shared G1 hook. In `.cursor/hooks.json` (version 1) it registers the hook for `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` (file writes), with `--format cursor` and `failClosed: true` [verified_doc: cursor.com/docs/agent/hooks]. User hooks and rules are kept.
+It writes the marked section in `AGENTS.md`, `.cursor/rules/uok-orchestrator.mdc` (`alwaysApply: true`), and one `.cursor/rules/uok-role-<role>.mdc` per role (Agent Requested by description). It also writes the launcher skill `.cursor/skills/uok/SKILL.md` — invoke with `/uok` in Agent chat and put the task in the same message (Cursor does not expand arguments into the skill file) [verified_doc: cursor.com/docs/agent/chat/commands]. A user-authored `uok` skill is kept untouched. It also writes `.orchestrator/` with policy files and the shared G1 hook. In `.cursor/hooks.json` (version 1) it registers the hook for `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` (file writes), with `--format cursor` and `failClosed: true` [verified_doc: cursor.com/docs/agent/hooks]. User hooks and rules are kept.
 
 Degradations (the installer prints them): roles are rules run one at a time; hook input has no agent identity, so worker-only rules are instructions; there is no per-role model binding. The `preToolUse` input fields for file writes are `unverified` and are checked live (§13).
 
 ## 13. Verification procedure
 
-- Level 2: rules load (check rule visibility in IDE settings); backups intact.
+- Level 2: rules load (check rule visibility in IDE settings); `/uok` appears in the chat
+  command list; backups intact.
 - Level 3 safe probes: a TIER-1 trivial task in a scratch dir; hook denial
   probe; approval-gate probe (simulated sensitive op must block); CLI
   `agent -p` read-only probe with `--model`. Tag `verified_live` per probe.

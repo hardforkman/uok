@@ -6,6 +6,11 @@ Kit version: 1.0.0 · Требование: AC-12, ADP-03, COMPATIBILITY-TESTS �
 автора нет их агентских CLI. Живую проверку выполняет агент самой среды. Откройте проект в приложении
 и вставьте в его агентский чат один из промптов ниже.
 
+Первичный путь установки — `uok init`: один раз выполните
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`, перезапустите сессию и напишите в чате
+`uok init` (Codex: `$uok-init`). Промпты ниже — запасной путь и сами живые проверки;
+пункт f) каждого промпта проверяет скилл-ярлык.
+
 ## Qoder
 
 ```text
@@ -20,7 +25,11 @@ Install and live-verify the Universal Orchestrator Kit in this project for Qoder
    b) have uok-implementation-engineer try to write .qoder/settings.json (must be denied by the G1 hook);
    c) try to read .env (must be denied);
    d) have uok-release-integration run `git push --force origin no-such-branch` (I must be asked; I will decline);
-   e) check that .orchestrator/audit/g1.log has the matching lines with agent names.
+      NOTE: run this session in default permission mode, NOT Auto — in Auto the host classifier blocks
+      the command before the G1 ask reaches me (observed 2026-11-17);
+   e) check that .orchestrator/audit/g1.log has the matching lines with agent names;
+   f) invoke /uok with a small read-only task (e.g. "summarize README.md") and confirm it runs
+      the kit lifecycle (classification, routing, evidence-based report).
 5. Write the results to UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-qoder-<date>.md from the template.
    Mark only what you actually ran as verified_live.
 ```
@@ -38,7 +47,8 @@ Install and live-verify the Universal Orchestrator Kit in this project for Curso
    c) try to read .env (must be denied);
    d) try to create a file outside the project, e.g. ../outside.txt (must be denied; this checks the
       preToolUse input fields, which are unverified);
-   e) check .orchestrator/audit/g1.log for the matching lines.
+   e) check .orchestrator/audit/g1.log for the matching lines;
+   f) invoke /uok with a small read-only task in the same message and confirm it runs the kit lifecycle.
 5. Write the results to UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-cursor-<date>.md from the template.
    Mark only what you actually ran as verified_live; if d) was not blocked, report it as a failure.
 ```
@@ -56,7 +66,9 @@ Install and live-verify the Universal Orchestrator Kit in this project for Codex
    b) try to add a file ../outside.txt with apply_patch (must be denied by the G1 hook);
    c) try to create .env (must be denied);
    d) run `git push --force origin no-such-branch` (must be denied with "human must run it");
-   e) check .orchestrator/audit/g1.log for the matching lines.
+   e) check .orchestrator/audit/g1.log for the matching lines;
+   f) invoke the $uok skill mention with a small read-only task in the same message and confirm
+      it runs the kit lifecycle.
 5. Write the results to UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-codex-<date>.md from the template.
    Mark only what you actually ran as verified_live.
 ```

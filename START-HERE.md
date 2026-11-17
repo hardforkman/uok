@@ -8,6 +8,8 @@ directory to an AI coding agent in any supported environment; it contains
 everything needed to understand, implement, and validate the system without
 the original authoring application.
 
+Руководство по применению на русском: [USAGE-GUIDE-RU.md](USAGE-GUIDE-RU.md).
+
 > Note: this kit is a specification + reference kernel + validation package.
 > It is not a running service. "Installing" it means implementing its adapter
 > in YOUR environment and reporting honestly what works.
@@ -44,12 +46,21 @@ it performs directive steps 8-12 for you (additive, idempotent, with backups):
 | Environment | Installer | Status |
 |---|---|---|
 | Claude Code | `python3 adapters/claude-code/install.py` | integration_tested (live, 2026-11-17) |
-| Qoder | `python3 adapters/qoder/install.py` | implementation_available (installer tested; live checks pending) |
+| Qoder | `python3 adapters/qoder/install.py` | integration_tested (live, 2026-11-17) |
 | Cursor | `python3 adapters/cursor/install.py` | implementation_available (installer tested; live checks pending) |
 | Codex | `python3 adapters/codex/install.py` | implementation_available (installer tested; live checks pending) |
 | other | none: follow the directive with `adapters/universal/README.md` | specification_complete |
 
-Run each installer with `--dry-run` first. All of them share `adapters/shared/` (installer core + G1 hook).
+**Primary install path: `uok init`.** Once per machine, run
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`
+to register a user-level `uok-init` skill; then in any project session type `uok init`
+(or `/uok-init`; Codex: `$uok-init`) and the agent installs the kit there.
+The same CLI works in a terminal: `python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init --host <host>`.
+
+Direct installer invocation remains available. Run each installer with `--dry-run` first.
+All of them share `adapters/shared/` (installer core + G1 hook).
+Every installer also creates a launcher skill: run `/uok <task>` (Claude Code, Qoder, Cursor) or the
+`$uok` mention (Codex) to start orchestration; see USAGE-GUIDE-RU §6.1 and your adapter README §12-13.
 
 Live checks for Qoder, Cursor and Codex: paste the prompt from
 [handoff/LIVE-CHECKS.md](handoff/LIVE-CHECKS.md) into that application's agent chat.

@@ -15,7 +15,7 @@ failure is honestly reported with impact.
 | AC-03 | All YAML files parse with a real parser; templates contain required fields and conservative defaults | self_test CHK-03, CHK-10 (PyYAML) | §12, CFG-01/02 |
 | AC-04 | Universal architecture internally consistent: three layers, four routing planes, stable terminology, no vendor dependency in Layer A | self_test CHK-11 + manual review of spec §1–2 | ARCH-01…04 |
 | AC-05 | Routing behavior and task lifecycle explicitly defined and mutually consistent (categories ↔ tiers ↔ roles ↔ states) | self_test CHK-06, CHK-09; behavior_tests TS-01/02/03/05/06/07 | RT-01…07, LC-01…04 |
-| AC-06 | Agent and task protocols documented with versioned machine-readable schemas, error semantics, evolution rules | self_test CHK-04 (15 schemas parse, version 1) | PROT-01…03 |
+| AC-06 | Agent and task protocols documented with versioned machine-readable schemas, error semantics, evolution rules | self_test CHK-04 (16 schemas parse, version 1) | PROT-01…03 |
 | AC-07 | Context isolation and security are mandatory requirements, enforced in contracts/gates and proven by behavior tests | self_test CHK-16; behavior_tests TS-09/10/11 | ISO-01…06, SEC-01…10 |
 | AC-08 | Adapter implementation requirements actionable: 13 documented aspects, discovery procedure, fallback ladder, installation preservation | self_test CHK-12 + manual review | ADP-01…03 |
 | AC-09 | Every adapter directory contains a meaningful README + capability profile with verification statuses | self_test CHK-12 | §3, §11, ADP-03 |
@@ -36,13 +36,21 @@ AC-12 additionally requires a human or fresh-agent dry run: hand the kit to an
 agent in a different environment and confirm it reaches an installation report
 without external context. Record the outcome in the installation report.
 
-## Current status (authoring-time, 2026-11-16)
+## Current status (updated 2026-11-17)
 
 - AC-01…AC-11, AC-13: verified by executed self-tests (see SELF-TEST.md for
-  actual run outputs and dates).
-- AC-12: specification reviewed for self-containment; independent fresh-agent
-  dry run NOT yet performed → `unverified`. This is the primary outstanding
-  validation work.
-- Live-environment adapter verification: NOT performed by the kit author;
-  adapters ship at `specification_complete`. Receiving agents perform
-  COMPATIBILITY-TESTS §3 probes and report actual maturity.
+  actual run outputs and dates; post-audit runs: 16/16 structural, 51/51
+  behavior, 123/123 G1 hook tests).
+- AC-12: partial. A fresh Claude Code session independently live-verified the
+  installed adapter on 2026-11-17 (see
+  [../handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md](../handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md)).
+  A full install-from-kit-alone run by a receiving agent in a second
+  environment was executed live in Qoder on 2026-11-17 (`uok init` primary
+  path, see ../handoff/INSTALLATION-REPORT-qoder-2026-11-17.md);
+  Cursor/Codex still pending → `unverified` for those.
+- Live-environment adapter verification: claude-code `integration_tested`
+  (live checks 1–12 executed); qoder `integration_tested` (LIVE-CHECKS
+  items a–e executed live 2026-11-17); cursor/codex `implementation_available`
+  (installers tested on sample projects, not yet live inside the apps —
+  prompts in [../handoff/LIVE-CHECKS.md](../handoff/LIVE-CHECKS.md));
+  universal `specification_complete`.

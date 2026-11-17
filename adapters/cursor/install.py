@@ -7,6 +7,7 @@ Installs, additively and idempotently (backups in .orchestrator/backups/<ts>/):
   - .orchestrator/ working tree, policy files, shared G1 hook (copied before it is registered);
   - AGENTS.md marked section + .cursor/rules/uok-orchestrator.mdc (alwaysApply) and one
     .cursor/rules/uok-role-<role>.mdc per role (Agent Requested by description);
+  - .cursor/skills/uok/SKILL.md — user launcher: /uok in chat [verified_doc: cursor.com/docs/agent/chat/commands];
   - .cursor/hooks.json (version 1): beforeShellExecution, beforeMCPExecution, beforeReadFile and
     preToolUse (file writes) -> G1 guard with --format cursor, failClosed (merged; user hooks kept).
 Cursor has no file-defined subagents and its hook input carries no agent identity, so roles are
@@ -23,6 +24,7 @@ EVENTS = {"beforeShellExecution": None, "beforeMCPExecution": None, "beforeReadF
 
 class CursorInstaller(core.BaseInstaller):
     HOST, FORMAT, INSTRUCTION_FILE = "cursor", "cursor", "AGENTS.md"
+    SKILL_DIR, SKILL_INVOKE = ".cursor/skills/uok", "/uok"
 
     def __init__(self, *a):
         super().__init__(*a)

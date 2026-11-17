@@ -7,6 +7,7 @@
 Installs, additively and idempotently (backups in .orchestrator/backups/<ts>/):
   - .orchestrator/ working tree, policy files, shared G1 hook (copied before it is registered);
   - .qoder/agents/uok-<role>.md subagents (frontmatter name/description/tools/model/permissionMode);
+  - .qoder/skills/uok/SKILL.md — user launcher: /uok <task> [verified_doc: docs.qoder.com/cli/Skills];
   - AGENTS.md marked section + .qoder/rules/uok.md (trigger: always_on);
   - PreToolUse hook in .qoder/settings.json (merged; user hooks and settings kept).
 Qoder hook events use the Claude Code schema (tool_name, tool_input, agent_type,
@@ -23,6 +24,7 @@ MATCHER = "Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*"
 
 class QoderInstaller(core.BaseInstaller):
     HOST, FORMAT, INSTRUCTION_FILE = "qoder", "qoder", "AGENTS.md"
+    SKILL_DIR, SKILL_INVOKE = ".qoder/skills/uok", "/uok"
     DEFAULT_MODELS = {"tier1": "lite", "tier2": "efficient", "tier3": "performance", "review": "performance"}
 
     def workers_line(self):

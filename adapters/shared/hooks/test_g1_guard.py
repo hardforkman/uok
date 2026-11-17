@@ -395,7 +395,8 @@ class G1GuardTest(unittest.TestCase):
 
     def test_uok_write_to_guard_controls_denied(self):
         for rel_path in (".orchestrator/hooks/g1_guard.py", ".orchestrator/policy/project.yaml",
-                         ".orchestrator/claims/active.json", ".claude/settings.json", ".git/config"):
+                         ".orchestrator/claims/active.json", ".claude/settings.json", ".git/config",
+                         ".agents/skills/uok/SKILL.md", ".qoder/skills/uok/SKILL.md"):
             self.assertDecision(self.run_event_full("Write", {"file_path": self.p(rel_path), "content": "x"},
                                 "uok-implementation-engineer"), "deny", "SEC-04")
 

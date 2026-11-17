@@ -160,7 +160,8 @@ def _cfg(key, default):
 STRICT = _cfg("enforcement", "standard").lower() == "strict"
 # Where the kit lives relative to the project root (set by the installer); its code is write-protected.
 KIT_DIR = _cfg("kit_dir", "UNIVERSAL-ORCHESTRATOR-KIT").strip("/").lower()
-PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".git/", ".orchestrator/", "claude.md", "claude.local.md",
+PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".agents/", ".git/", ".orchestrator/",
+             "claude.md", "claude.local.md",
              "agents.md", "agents.local.md", ".mcp.json", ".gitignore") \
     + (() if os.path.isabs(KIT_DIR) or KIT_DIR.startswith("..") else
        (KIT_DIR + "/validation/", KIT_DIR + "/core/", KIT_DIR + "/adapters/"))

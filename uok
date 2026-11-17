@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Universal Orchestrator Kit launcher (kit 1.0.0).
+
+  python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init [--host auto|claude-code|qoder|cursor|codex]
+          [--project DIR] [--mode standard|strict] [--models tier1=..,tier2=..,tier3=..,review=..]
+          [--dry-run]
+  python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap [--host auto|all|claude-code|qoder|cursor|codex]
+          [--dry-run]
+
+init      Primary installation: dispatches to adapters/<host>/install.py (additive,
+          idempotent, backups). --project defaults to the current directory.
+bootstrap One-time per machine: registers a user-level `uok-init` skill so that typing
+          `uok init` (or /uok-init; Codex: $uok-init) in ANY project session runs init.
+          Global skill locations [verified_doc 2026-11-17]: ~/.claude/skills,
+          ~/.qoder/skills, ~/.cursor/skills, ~/.agents/skills (see adapter PROFILE.yaml).
+          User-authored skills are never overwritten; kit-managed ones are backed up to
+          ~/.uok/backups/<timestamp>/ before update.
+
+Host auto-detection is a heuristic (environment-variable prefixes, then project config
+dirs, then home config dirs); it is a convenience for terminal use only — the session
+skill always passes --host explicitly. Requires Python >= 3.10; init additionally needs
+PyYAML (used by the adapter installers).
+"""
+import argparse
+import datetime
+import os
+import shutil
+import subprocess
+import sys
+
+KIT = os.path.dirname(os.path.realpath(__file__))
+KIT_VERSION = "1.0.0"
+HOSTS = ("claude-code", "qoder", "cursor", "codex")
+BOOT_MARK = "(Universal Orchestrator Kit bootstrap)"
+GLOBAL_SKILL_DIR = {"claude-code": ".claude/skills", "qoder": ".qoder/skills",
+                    "cursor": ".cursor/skills", "codex": ".agents/skills"}
+PROJECT_DIR_MARKER = {"claude-code": ".claude", "qoder": ".qoder", "cursor": ".cursor", "codex": ".codex"}
+HOME_MARKER = {"claude-code": ".claude", "qoder": ".qoder", "cursor": ".cursor", "codex": ".codex"}
+ENV_PREFIX = {"claude-code": "CLAUDE", "qoder": "QODER", "cursor": "CURSOR", "codex": "CODEX"}
+INIT_INVOKE = {"claude-code": "/uok-init", "qoder": "/uok-init", "cursor": "/uok-init", "codex": "$uok-init"}
+LAUNCH_INVOKE = {"claude-code": "/uok", "qoder": "/uok", "cursor": "/uok", "codex": "$uok"}
+
+
+def detect_host(project):
+    """Heuristic: first tier (env, project dirs, home dirs) with exactly one candidate."""
+    tiers = [
+        [h for h in HOSTS if any(k.startswith(ENV_PREFIX[h]) for k in os.environ)],
+        [h for h in HOSTS if os.path.isdir(os.path.join(project, PROJECT_DIR_MARKER[h]))],
+        [h for h in HOSTS if os.path.isdir(os.path.expanduser("~/" + HOME_MARKER[h]))],
+    ]
+    for tier in tiers:
+        if len(tier) == 1:
+            return tier[0], None
+        if len(tier) > 1:
+            return None, tier
+    return None, []
+
+
+def resolve_host(requested, project):
+    if requested != "auto":
+        return requested
+    host, ambiguous = detect_host(project)
+    if host:
+        return host
+    if ambiguous:
+        sys.exit(f"uok: several hosts look present ({', '.join(ambiguous)}); pass --host explicitly")
+    sys.exit("uok: cannot detect the host; pass --host claude-code|qoder|cursor|codex")
+
+
+def cmd_init(a):
+    project = os.path.realpath(a.project or os.getcwd())
+    if not os.path.isdir(project):
+        sys.exit(f"uok: project directory not found: {project}")
+    host = resolve_host(a.host, project)
+    installer = os.path.join(KIT, "adapters", host, "install.py")
+    cmd = [sys.executable, installer, "--project", project, "--mode", a.mode]
+    if a.models:
+        cmd += ["--models", a.models]
+    if a.dry_run:
+        cmd.append("--dry-run")
+    print(f"uok init: host={host}, project={project}, kit={KIT}")
+    return subprocess.call(cmd)
+
+
+def skill_text(host):
+    return f"""---
+name: uok-init
+description: "Install the Universal Orchestrator Kit into the current project {BOOT_MARK}. Use when the user types 'uok init' or {INIT_INVOKE[host]}, or asks to install or set up the orchestrator kit in this project."
+---
+
+Install the Universal Orchestrator Kit (kit {KIT_VERSION}) into THIS project for **{host}**.
+Kit on this machine: `{KIT}` (path embedded by `uok bootstrap`). If that path no longer
+exists, ask the user where the kit lives and suggest re-running `python3 <kit>/uok bootstrap`.
+
+1. Show the plan first (use the session's current project root, quoted):
+   `python3 "{KIT}/uok" init --host {host} --project "<project root>" --dry-run`
+2. Install: the same command without `--dry-run`. It is additive and idempotent; backups
+   go to `.orchestrator/backups/`. If the user gives real model selectors for this host,
+   pass them with `--models tier1=..,tier2=..,tier3=..,review=..` (defaults are unverified).
+3. Report the installer's changes and verification output honestly; never claim live
+   checks that did not run.
+4. Tell the user to restart the session. Afterwards tasks run through the kit via
+   `{LAUNCH_INVOKE[host]} <task>` (see the kit's USAGE-GUIDE-RU.md §6).
+
+Do not modify user-authored agents, skills or hooks — the installer preserves them.
+Do not perform sensitive operations (deploys, credential changes, publication).
+"""
+
+
+def cmd_bootstrap(a):
+    if a.host == "all":
+        hosts = list(HOSTS)
+    elif a.host != "auto":
+        hosts = [a.host]
+    else:
+        hosts = [h for h in HOSTS if os.path.isdir(os.path.expanduser("~/" + HOME_MARKER[h]))]
+        if not hosts:
+            sys.exit("uok: no host config dirs found in ~; pass --host explicitly or --host all")
+    ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_dir = os.path.expanduser(f"~/.uok/backups/{ts}")
+    changes, kept, warnings = [], [], []
+    for host in hosts:
+        path = os.path.expanduser(f"~/{GLOBAL_SKILL_DIR[host]}/uok-init/SKILL.md")
+        text = skill_text(host)
+        old = open(path, encoding="utf-8").read() if os.path.exists(path) else None
+        if old is not None and BOOT_MARK not in old:
+            kept.append(f"{path} (user-authored, not touched)")
+            warnings.append(f"{host}: skill name 'uok-init' taken by a user skill; not installed")
+            continue
+        if old == text:
+            kept.append(f"{path} (unchanged)")
+            continue
+        changes.append(f"{'update' if old is not None else 'create'} {path}")
+        if a.dry_run:
+            continue
+        if old is not None:
+            dst = os.path.join(backup_dir, host, "SKILL.md")
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(path, dst)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    print(f"uok bootstrap (kit {KIT_VERSION}, {'DRY RUN' if a.dry_run else 'done'}): "
+          f"user-level uok-init skill for {', '.join(hosts)}")
+    for title, items in (("changes", changes or ["(none)"]), ("kept", kept), ("warnings", warnings)):
+        if items:
+            print(f"{title}:")
+            for it in items:
+                print("  - " + it)
+    if changes and not a.dry_run and any(c.startswith("update") for c in changes):
+        print(f"backups: {backup_dir}/")
+    if not a.dry_run:
+        print("next: restart the agent session, open any project and type `uok init` "
+              "(or /uok-init; Codex: $uok-init) to install the kit there.")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="uok", description=__doc__.strip().splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    pi = sub.add_parser("init", help="install the kit into a project (primary installation path)")
+    pi.add_argument("--host", choices=("auto",) + HOSTS, default="auto")
+    pi.add_argument("--project", default=None, help="project root (default: current directory)")
+    pi.add_argument("--mode", choices=("standard", "strict"), default="standard")
+    pi.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= selectors for the host")
+    pi.add_argument("--dry-run", action="store_true")
+    pb = sub.add_parser("bootstrap", help="register the user-level uok-init skill (once per machine)")
+    pb.add_argument("--host", choices=("auto", "all") + HOSTS, default="auto")
+    pb.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+    sys.exit(cmd_init(a) if a.cmd == "init" else cmd_bootstrap(a))
+
+
+if __name__ == "__main__":
+    main()

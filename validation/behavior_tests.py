@@ -259,6 +259,182 @@ def main():
     except rk.TransitionError:
         check("TS-12", True, "sequential execution enforced (concurrency=1)")
 
+    # --- Audit regression checks ------------------------------------------
+
+    # CAT-08 with all-high modifiers must stay TIER-4 (no ladder overflow)
+    tier, _ = rk.compute_tier({"category": "CAT-08", "complexity": "high",
+                               "reasoning": "advanced", "failure_impact": "high"}, policy)
+    check("TS-03", tier == "TIER-4", f"CAT-08 all-high modifiers stay TIER-4 (got {tier})")
+    tier, _ = rk.compute_tier({"category": "CAT-01", "requested_tier": "TIER-5"}, policy)
+    check("TS-02", tier == "TIER-4",
+          f"requested TIER-5 without review clamps to TIER-4 (got {tier})")
+
+    # Fallback chain progresses through consumed steps, ends at human escalation
+    consumed, seq = [], []
+    for _ in range(4):
+        step = rk.plan_fallback(policy, "execution_failure", 2, consumed=consumed)
+        seq.append(step)
+        if step == "human_escalation":
+            break
+        consumed.append(step)
+    check("TS-07", seq == ["same_tier_alternative", "escalate_tier", "human_escalation"],
+          f"consumed-step progression {seq}")
+
+    # Reviewer instance exclusion + same-family degradation flag
+    rt = dict(fx["TS-08"]["task"], agent_instance_id="impl-1")
+    d = rk.route(rt, policy, models, roles,
+                 implementer={"model_id": "mock-advanced",
+                              "agent_instance_id": "impl-1", "family": "mock-advanced"})
+    check("TS-08", d["agent_instance_id"] != "impl-1",
+          f"reviewer instance differs from implementer ({d['agent_instance_id']})")
+    same_fam = mock_models([{"id": "mock-reviewer", "family": "mock-advanced"}])
+    d = rk.route(fx["TS-08"]["task"], policy, same_fam, roles,
+                 implementer={"model_id": "mock-advanced",
+                              "agent_instance_id": "impl-1", "family": "mock-advanced"})
+    check("TS-08", "degraded_independence" in d["flags"],
+          "same-family-only review flagged degraded_independence")
+
+    # CAT-07 mutating intent (write claim) requires approval; read-only does not
+    t7 = {"task_id": "T-demo-cat07", "category": "CAT-07",
+          "created_at": "2026-11-17T00:00:00Z",
+          "resource_claims": [{"path": "firewall.rules", "mode": "write"}]}
+    d = rk.route(t7, policy, models, roles)
+    check("TS-09", d["requires_approval"], "CAT-07 with write claim requires approval")
+    d = rk.route(dict(t7, resource_claims=[{"path": "audit.log", "mode": "read"}]),
+                 policy, models, roles)
+    check("TS-09", not d["requires_approval"], "read-only CAT-07 does not force approval")
+
+    # Expired and empty-operations approvals are invalid at EXECUTING entry
+    kernel = rk.LifecycleKernel(policy)
+    t = new_task(fx["TS-09"]["task"])
+    kernel.register(t)
+    t["routing"] = rk.route(t, policy, models, roles)
+    advance(kernel, t["task_id"], "APPROVED_IF_REQUIRED")
+    base_appr = {"approval_id": "A-x", "task_id": t["task_id"],
+                 "operations": ["production_deploy"], "approver": "human:test",
+                 "granted_at": "2026-11-16T00:00:00Z"}
+    t["approvals"] = [dict(base_appr, expires_at="2020-01-01T00:00:00Z")]
+    try:
+        kernel.transition(t["task_id"], "EXECUTING", "orchestrator", "expired approval")
+        check("TS-09", False, "expired approval was NOT blocked")
+    except rk.TransitionError:
+        check("TS-09", True, "expired approval blocked")
+    t["approvals"] = [dict(base_appr, operations=[])]
+    try:
+        kernel.transition(t["task_id"], "EXECUTING", "orchestrator", "empty-ops approval")
+        check("TS-09", False, "empty-operations approval was NOT blocked")
+    except rk.TransitionError:
+        check("TS-09", True, "empty-operations approval approves nothing")
+
+    # G3 blocks COMPLETED for high-impact tasks; gate_result or waiver unblocks
+    kernel = rk.LifecycleKernel(policy)
+    t = new_task(dict(fx["TS-02"]["task"], task_id="T-demo-g3", failure_impact="high"))
+    kernel.register(t)
+    t["routing"] = rk.route(t, policy, models, roles)
+    advance(kernel, t["task_id"], "VALIDATING")
+    t["result"] = {"summary": "done", "status": "success",
+                   "artifacts": ["diff.patch"], "evidence": ["test output: 12 passed"]}
+    try:
+        kernel.transition(t["task_id"], "COMPLETED", "orchestrator", "no review verdict")
+        check("TS-08", False, "COMPLETED without G3 verdict was NOT blocked")
+    except rk.TransitionError:
+        check("TS-08", True, "G3 independent-review verdict required at COMPLETED")
+    t["gate_results"] = [{"gate": "G3", "passed": True, "at": "2026-11-17",
+                          "evidence": ["review verdict: approve"]}]
+    kernel.transition(t["task_id"], "COMPLETED", "orchestrator", "G3 passed")
+    check("TS-08", kernel.tasks[t["task_id"]]["status"] == "COMPLETED",
+          "G3 gate_result with evidence unblocks COMPLETED")
+    t2 = new_task(dict(fx["TS-02"]["task"], task_id="T-demo-g3w", failure_impact="high",
+                       waivers=[{"scope": "review", "approver": "human:test",
+                                 "covers": [], "granted_at": "2026-11-17"}]))
+    kernel.register(t2)
+    t2["routing"] = rk.route(t2, policy, models, roles)
+    advance(kernel, t2["task_id"], "VALIDATING")
+    t2["result"] = dict(t["result"])
+    kernel.transition(t2["task_id"], "COMPLETED", "orchestrator", "human review waiver")
+    check("TS-08", kernel.tasks[t2["task_id"]]["status"] == "COMPLETED",
+          "explicit human review waiver substitutes G3")
+
+    # Dependency cycles rejected at DECOMPOSED; dependency waiver is explicit
+    kernel = rk.LifecycleKernel(policy)
+    a = new_task({"task_id": "T-cyc-a", "category": "CAT-02",
+                  "created_at": "2026-11-17T00:00:00Z", "depends_on": ["T-cyc-b"]})
+    b = new_task({"task_id": "T-cyc-b", "category": "CAT-02",
+                  "created_at": "2026-11-17T00:00:00Z", "depends_on": ["T-cyc-a"]})
+    kernel.register(a); kernel.register(b)
+    try:
+        advance(kernel, "T-cyc-a", "DECOMPOSED")
+        check("TS-05", False, "dependency cycle was NOT rejected")
+    except rk.TransitionError:
+        check("TS-05", True, "dependency cycle rejected at DECOMPOSED")
+    kernel = rk.LifecycleKernel(policy)
+    a = new_task({"task_id": "T-wa-a", "category": "CAT-02",
+                  "created_at": "2026-11-17T00:00:00Z"})
+    b = new_task({"task_id": "T-wa-b", "category": "CAT-02",
+                  "created_at": "2026-11-17T00:00:00Z", "depends_on": ["T-wa-a"]})
+    kernel.register(a); kernel.register(b)
+    advance(kernel, "T-wa-b", "DECOMPOSED")
+    try:
+        kernel.transition("T-wa-b", "DEPENDENCIES_RESOLVED", "orchestrator", "no waiver")
+        check("TS-05", False, "unwaived incomplete dependency was NOT blocked")
+    except rk.TransitionError:
+        check("TS-05", True, "incomplete dependency blocked without waiver")
+    b["waivers"] = [{"scope": "dependency", "approver": "human:test",
+                     "covers": ["T-wa-a"], "granted_at": "2026-11-17"}]
+    kernel.transition("T-wa-b", "DEPENDENCIES_RESOLVED", "orchestrator", "human waiver")
+    check("TS-05", kernel.tasks["T-wa-b"]["status"] == "DEPENDENCIES_RESOLVED",
+          "explicit human dependency waiver allows resolution")
+
+    # FAILED child blocks parent; partial_acceptance waiver unblocks
+    kernel = rk.LifecycleKernel(policy)
+    child = new_task({"task_id": "T-ch-1", "category": "CAT-02",
+                      "created_at": "2026-11-17T00:00:00Z"})
+    parent = new_task({"task_id": "T-par-1", "category": "CAT-02",
+                       "created_at": "2026-11-17T00:00:00Z", "children": ["T-ch-1"]})
+    kernel.register(child); kernel.register(parent)
+    kernel.tasks["T-ch-1"]["status"] = "FAILED"
+    parent["routing"] = rk.route(parent, policy, models, roles)
+    advance(kernel, "T-par-1", "VALIDATING")
+    parent["result"] = {"summary": "partial", "status": "success",
+                        "artifacts": [], "evidence": ["child 1 failed, rest passed"]}
+    try:
+        kernel.transition("T-par-1", "COMPLETED", "orchestrator", "failed child")
+        check("TS-05", False, "FAILED child did NOT block parent COMPLETED")
+    except rk.TransitionError:
+        check("TS-05", True, "FAILED child blocks parent COMPLETED")
+    parent["waivers"] = [{"scope": "partial_acceptance", "approver": "human:test",
+                          "covers": ["T-ch-1"], "granted_at": "2026-11-17"}]
+    kernel.transition("T-par-1", "COMPLETED", "orchestrator", "human partial acceptance")
+    check("TS-05", kernel.tasks["T-par-1"]["status"] == "COMPLETED",
+          "human partial_acceptance waiver unblocks parent")
+
+    # Grants: expired and whole-project wildcard scopes rejected (ISO-04)
+    base_env = fx["TS-10"]["envelopes"]["granted_cross_project"]
+    base_grant = base_env["cross_project_grants"][0]
+    for label, mutation in [
+        ("expired grant", {"expires_at": "2020-01-01T00:00:00Z"}),
+        ("whole-project scope", {"scope": ["projects/shared-lib"]}),
+        ("wildcard scope", {"scope": ["projects/shared-lib/**"]}),
+    ]:
+        env = copy.deepcopy(base_env)
+        grant = dict(copy.deepcopy(base_grant), **mutation)
+        try:
+            rk.validate_envelope(env, "demo", grants=[grant])
+            outcome = "accepted"
+        except rk.EnvelopeError:
+            outcome = "rejected"
+        check("TS-10", outcome == "rejected", f"{label}: {outcome} (expected rejected)")
+
+    # doc_only_verification flag when the chosen mechanism is only verified_doc
+    codex_profile = rk.load_yaml("adapters/codex/PROFILE.yaml")
+    _, cflags = rk.select_execution_environment(codex_profile, {})
+    check("TS-12", "doc_only_verification" in cflags,
+          f"doc-only adapter flagged: {cflags}")
+    cc_profile = rk.load_yaml("adapters/claude-code/PROFILE.yaml")
+    _, ccflags = rk.select_execution_environment(cc_profile, {})
+    check("TS-12", "doc_only_verification" not in ccflags,
+          "live-verified adapter not flagged doc-only")
+
     # Report
     print(f"behavior_tests: {len(PASSES)} checks passed, {len(FAILURES)} failed")
     for p in PASSES:

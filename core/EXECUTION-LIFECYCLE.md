@@ -56,7 +56,8 @@ Rules:
   backoff 5s then 30s, feedback from the failed attempt attached.
 - Timeouts: per-task `timeout_seconds`; defaults by tier — TIER-1: 300,
   TIER-2: 1800, TIER-3: 3600, TIER-4: 3600, TIER-5: 1800. Adapters MAY map
-  these to native limits (e.g. Qoder `timeoutMins`/`maxTurns`). Timeout ⇒
+  these to native limits where the adapter profile documents a verified
+  native mechanism. Timeout ⇒
   cancel execution, release claims, then fallback chain.
 - Failure handling: execute `fallback.on_execution_failure` in order; each
   step logged. FAILED is terminal for the attempt chain; the orchestrator
@@ -81,7 +82,7 @@ Conflict prevention strategies (choose per adapter capability, document choice):
 | Strategy | Mechanism | When |
 |----------|-----------|------|
 | `resource_lock` | orchestrator-held claim ledger; a task acquires its write claims before EXECUTING and releases at terminal state | any environment; default in reference kernel |
-| `worktree_isolation` | each writer works in its own git worktree/branch; merge coordinated afterwards | git repos; native support e.g. Qoder `isolation: worktree` |
+| `worktree_isolation` | each writer works in its own git worktree/branch; merge coordinated afterwards | git repos; where the adapter profile documents verified native worktree support |
 | `merge_coordination` | release_integration role owns merges; writers never touch shared branches directly | parallel feature work |
 | `native_isolation` | application-native sandboxing/session isolation | where the adapter documents it as verified |
 
@@ -122,3 +123,35 @@ conflicting tasks and record the degradation in the installation report.
   evidenced, required reviews approved, approvals recorded, metrics emitted.
 - The orchestrator emits the final handoff per
   [../protocols/HANDOFF-CONTRACT.md](../protocols/HANDOFF-CONTRACT.md).
+
+## 8. Approval validity, waivers, and completion enforcement (SEC-07, LC-04, QA-01)
+
+Normative rules enforced by the reference kernel (`LifecycleKernel.transition`):
+
+- **Cycle rejection:** a `depends_on` cycle anywhere in the task graph is
+  rejected at DECOMPOSED; the task cannot proceed until the graph is a DAG.
+- **Dependency waiver:** DEPENDENCIES_RESOLVED normally requires every
+  dependency COMPLETED. A human may waive a specific dependency via a
+  `waivers` entry `{scope: dependency, covers: [<task_id>], approver, expires_at}`;
+  the waiver is logged and never implicit.
+- **Approval validity (EXECUTING entry):** when `requires_approval` is true,
+  at least one `approval_record` must be valid: matching `task_id`, named
+  human `approver`, non-empty `operations`, and not expired (`expires_at` in
+  the past, or unparseable, invalidates the record). The union of valid
+  records' operations must cover every sensitive operation of the task.
+  An approval with an empty operations list approves nothing.
+- **G3 at COMPLETED:** when independent review is required (failure_impact
+  high, category CAT-07, or `require_independent_review: true`), COMPLETED
+  additionally requires a `gate_result` for G3 with `passed: true` and
+  evidence, produced by an independent reviewer (QA-01). A human review
+  waiver (`scope: review`) may substitute, recorded explicitly.
+- **Children at COMPLETED:** every child must be COMPLETED; a FAILED child
+  blocks the parent unless a human `partial_acceptance` waiver covers it.
+- **G4 expiry recheck:** approvals are re-checked for expiry at COMPLETED —
+  an approval that expired mid-execution does not carry final acceptance.
+- **Result evidence:** COMPLETED requires a `result` with non-empty
+  `evidence`; assertions without evidence never complete a task.
+
+Waivers are human decisions, always scoped, always expiring or revocable,
+always written to the audit log. No waiver may disable project isolation,
+secret redaction, or the sensitive-operation list itself.

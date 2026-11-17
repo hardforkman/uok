@@ -1,12 +1,12 @@
 schema: adapter_profile
 schema_version: 1
 adapter: cursor
-researched_at: "2026-11-16"
+researched_at: '2026-11-16'
 capabilities:
   instruction_files:
     status: verified_doc
-    native_mechanism: .cursor/rules/*.mdc (description/globs/alwaysApply); AGENTS.md
-      with nested dirs; User Rules
+    native_mechanism: .cursor/rules/*.mdc (description/globs/alwaysApply); AGENTS.md with nested dirs;
+      User Rules
     evidence: https://cursor.com/docs/context/rules
     fallback: null
   custom_agents:
@@ -36,15 +36,13 @@ capabilities:
     fallback: resource_lock
   blocking_hooks:
     status: verified_doc
-    native_mechanism: 'hooks.json v1: beforeShellExecution/beforeMCPExecution/beforeReadFile
-      (+preToolUse); output {permission: allow|deny|ask}; exit 2 blocks; failClosed
-      option; no agent identity'
+    native_mechanism: 'hooks.json v1: beforeShellExecution/beforeMCPExecution/beforeReadFile (+preToolUse);
+      output {permission: allow|deny|ask}; exit 2 blocks; failClosed option; no agent identity'
     evidence: https://cursor.com/docs/agent/hooks (2026-11-17)
     fallback: null
   permission_modes:
     status: unverified
-    native_mechanism: IDE approval prompts; headless prompts denied/rejected (secondary
-      research)
+    native_mechanism: IDE approval prompts; headless prompts denied/rejected (secondary research)
     evidence: secondary research; confirm in docs
     fallback: orchestrator_pre_dispatch_checks
   mcp:
@@ -67,3 +65,10 @@ capabilities:
     native_mechanism: null
     evidence: not applicable until multi-agent support confirmed
     fallback: flatten_hierarchy
+  skills:
+    status: verified_doc
+    native_mechanism: '.cursor/skills/<name>/SKILL.md; user invokes /<name> in Agent chat; arguments are
+      not expanded via file syntax (the skill reads the accompanying message); user-level (all projects):
+      ~/.cursor/skills/uok-init/SKILL.md via `uok bootstrap`'
+    evidence: https://cursor.com/docs/agent/chat/commands (2026-11-17)
+    fallback: null

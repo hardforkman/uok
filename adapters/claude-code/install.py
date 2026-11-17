@@ -14,6 +14,8 @@ What it does (AUTONOMOUS-IMPLEMENTATION-DIRECTIVE steps 8-12, Claude Code specif
      keeps every existing user hook, rule and setting;
   4. writes .claude/agents/uok-<role>.md for each role in core/AGENT-CAPABILITIES.yaml,
      never overwriting a user-authored file with the same name;
+  4a. writes .claude/skills/uok/SKILL.md — user launcher /uok <task> ($ARGUMENTS expands;
+     disable-model-invocation keeps it user-only) [verified_doc: code.claude.com/docs/en/skills];
   5. writes/updates the marked UOK section of CLAUDE.md (user text outside the markers is kept);
   6. creates .orchestrator/{policy,tasks,audit,claims,routing} and policy files from templates/
      (existing policy files are kept; only machine-specific root paths are normalised to {root});
@@ -40,6 +42,7 @@ PAYLOAD = os.path.join(os.path.dirname(ADAPTER), "shared")
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 AGENT_MARK = "(Universal Orchestrator Kit role)"
+SKILL_MARK = "(Universal Orchestrator Kit skill)"
 HOOK_CMD = 'python3 -I "$CLAUDE_PROJECT_DIR/.orchestrator/hooks/g1_guard.py"'
 HOOK_MATCHER = "Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*"
 SECRET_NAMES = [".env", ".env.*", "*credentials*", "*secret*", "*.pem", "*.key", "*.p12", "*.pfx",
@@ -192,6 +195,45 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
                 continue
             self.write(path, self.agent_text(r), f"kit role {r['id']}")
 
+    def step_skill(self):
+        path = self.p(".claude", "skills", "uok", "SKILL.md")
+        if os.path.exists(path) and SKILL_MARK not in open(path, encoding="utf-8").read():
+            self.kept.append(f"{os.path.relpath(path, self.root)} (user-authored, not touched)")
+            self.warnings.append("skill name 'uok' taken by a user skill; kit launcher not installed")
+            return
+        k = self.kit_rel
+        text = f"""---
+name: uok
+description: "Run a task through the Universal Orchestrator Kit {SKILL_MARK}: classify, route to uok-* roles, enforce claims/approvals/review, report with evidence. Use when the user invokes /uok with an engineering task."
+argument-hint: "[task]"
+disable-model-invocation: true
+---
+
+You are the **orchestrator** of the Universal Orchestrator Kit (kit {KIT_VERSION}) for this project.
+The user launched this skill to run a task through the kit. Follow the marked UOK section of
+`CLAUDE.md` and `.orchestrator/policy/` — they are normative.
+
+Task: $ARGUMENTS
+If no task text came with the invocation, ask the user for the task before acting.
+
+Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
+1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
+   resolve dependencies (no cycles).
+2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
+   sufficient tier (the ladder is TIER-1…TIER-5; trivial tasks are TIER-1 — there is no TIER-0),
+   matching `uok-*` role; never escalate into TIER-5; exhaustion ⇒ ask the human.
+3. Before parallel writers, record disjoint write claims in `.orchestrator/claims/active.json`;
+   release them when done.
+4. Sensitive operations (production deploy, financial actions, irreversible data changes,
+   credential changes, external publication) require recorded human approval — ask, never
+   auto-approve (SEC-07).
+5. Validate with evidence; high-impact work needs an independent reviewer role on a different
+   model when available; COMPLETED requires evidence, never assertions.
+6. Report results with actual command output and a verification status per claim
+   (`verified_live` only if executed). Failures and degradations are reported honestly.
+"""
+        self.write(path, text, "orchestrator launcher skill (/uok)")
+
     def claude_section(self):
         strict = self.mode == "strict"
         lines = [
@@ -201,6 +243,8 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
             "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored).", "",
             "The main session is the **orchestrator**; workers are the subagents `uok-*` in `.claude/agents/` "
             f"(one per role in `{self.kit_rel}/core/AGENT-CAPABILITIES.yaml`).", "",
+            "The user can launch orchestration with `/uok <task>` (skill `.claude/skills/uok/SKILL.md`); "
+            "it runs the same lifecycle as any task.", "",
             "Rules:",
             f"- Classify the task (`{self.kit_rel}/core/TASK-CLASSIFICATION.md`), pick the cheapest sufficient tier "
             f"(`{self.kit_rel}/core/ROUTING-POLICY.md`), delegate to the matching `uok-*` agent; escalate on failure, "
@@ -308,7 +352,7 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
         if not os.path.isdir(self.root):
             sys.exit(f"project directory not found: {self.root}")
         # Order matters: the hook file must exist before settings.json points to it.
-        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.step_agents,
+        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.step_agents, self.step_skill,
                      self.step_claude_md, self.step_ignores, self.step_settings):
             step()
         results = self.verify()
@@ -325,7 +369,8 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
         if results:
             print("verification:"); [print("  - " + r) for r in results]
         print("next: restart the Claude Code session (agents load at session start), then fill "
-              f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md with your live checks.")
+              f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md with your live checks. "
+              "Launch orchestration with `/uok <task>`.")
         return 0 if all(("exit 0)" in r) or r.endswith("PASS") for r in results) else 1
 
 

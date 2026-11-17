@@ -43,7 +43,7 @@ overrides: []
 # - id: claude-sonnet-class
 #   availability: verified_available
 #   capabilities: { context_window_tokens: 200000 }
-#   cost: { input_per_mtok: 3.0, output_per_mtok: 15.0 }
+#   cost: { input_per_mtok: null, output_per_mtok: null }  # fill from provider pricing page only
 #   verified_at: "2026-11-16"
 #   evidence: ".orchestrator/audit/model_probes/sonnet.json"
 

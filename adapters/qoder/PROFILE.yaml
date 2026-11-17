@@ -1,25 +1,22 @@
 schema: adapter_profile
 schema_version: 1
 adapter: qoder
-researched_at: "2026-11-16"
+researched_at: '2026-11-16'
 capabilities:
   instruction_files:
     status: verified_doc
-    native_mechanism: AGENTS.md (default; context.fileName configurable), AGENTS.local.md,
-      .qoder/rules/**/*.md with trigger frontmatter; @imports restricted to project
-      boundaries
+    native_mechanism: AGENTS.md (default; context.fileName configurable), AGENTS.local.md, .qoder/rules/**/*.md
+      with trigger frontmatter; @imports restricted to project boundaries
     evidence: https://docs.qoder.com/cli/memory
     fallback: null
   custom_agents:
     status: verified_doc
-    native_mechanism: .qoder/agents/*.md, ~/.qoder/agents/*.md, --agents JSON; frontmatter
-      name/description/tools/disallowedTools/model/permissionMode/maxTurns/timeoutMins/isolation/background/hooks/mcpServers
+    native_mechanism: .qoder/agents/*.md, ~/.qoder/agents/*.md, --agents JSON; frontmatter name/description/tools/disallowedTools/model/permissionMode/maxTurns/timeoutMins/isolation/background/hooks/mcpServers
     evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   per_agent_model_selection:
     status: verified_doc
-    native_mechanism: 'model frontmatter: inherit/auto/lite/efficient/performance
-      or model name'
+    native_mechanism: 'model frontmatter: inherit/auto/lite/efficient/performance or model name'
     evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   parallel_dispatch:
@@ -39,15 +36,14 @@ capabilities:
     fallback: null
   blocking_hooks:
     status: verified_doc
-    native_mechanism: PreToolUse in .qoder/settings.json; Claude-compatible stdin
-      (tool_name, tool_input, agent_type); hookSpecificOutput.permissionDecision allow/deny/ask;
-      exit 2 blocks
+    native_mechanism: PreToolUse in .qoder/settings.json; Claude-compatible stdin (tool_name, tool_input,
+      agent_type); hookSpecificOutput.permissionDecision allow/deny/ask; exit 2 blocks
     evidence: https://docs.qoder.com/cli/hooks (2026-11-17)
     fallback: null
   permission_modes:
     status: verified_doc
-    native_mechanism: 'permissionMode: default/acceptEdits/bypassPermissions/dontAsk/auto/plan;
-      global permission config'
+    native_mechanism: 'permissionMode: default/acceptEdits/bypassPermissions/dontAsk/auto/plan; global
+      permission config'
     evidence: https://docs.qoder.com/cli/subagent ; /cli/permissions
     fallback: null
   mcp:
@@ -57,8 +53,7 @@ capabilities:
     fallback: null
   headless_invocation:
     status: verified_doc
-    native_mechanism: qoder -p "..."; --agent <name>; cli/run-in-scripts, cli/loop,
-      Agent SDK
+    native_mechanism: qoder -p "..."; --agent <name>; cli/run-in-scripts, cli/loop, Agent SDK
     evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   context_isolation:
@@ -68,7 +63,13 @@ capabilities:
     fallback: null
   nesting:
     status: unknown
-    native_mechanism: subagent may call subagent if Agent tool available; Agent(name)
-      restricts callees; depth limit not documented
+    native_mechanism: subagent may call subagent if Agent tool available; Agent(name) restricts callees;
+      depth limit not documented
     evidence: https://docs.qoder.com/cli/subagent
     fallback: flatten_hierarchy
+  skills:
+    status: verified_doc
+    native_mechanism: '.qoder/skills/<name>/SKILL.md; frontmatter name/description required; user invokes
+      /<name> in the session; user-level (all projects): ~/.qoder/skills/uok-init/SKILL.md via `uok bootstrap`'
+    evidence: https://docs.qoder.com/cli/Skills (2026-11-17)
+    fallback: null

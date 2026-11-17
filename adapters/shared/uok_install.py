@@ -22,6 +22,7 @@ KIT = os.path.dirname(os.path.dirname(SHARED))
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 ROLE_MARK = "(Universal Orchestrator Kit role)"
+SKILL_MARK = "(Universal Orchestrator Kit skill)"
 # Portable hook command: resolve the project root at run time (hosts may start in a subdirectory).
 HOOK_PATH_EXPR = '"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.orchestrator/hooks/g1_guard.py"'
 
@@ -66,6 +67,8 @@ class BaseInstaller:
     HOST = "generic"            # adapter name
     FORMAT = "claude"           # g1_guard --format
     INSTRUCTION_FILE = "AGENTS.md"
+    SKILL_DIR = None            # host-native project skill dir, e.g. ".qoder/skills/uok"
+    SKILL_INVOKE = "/uok"       # how the user launches the skill in this host
     DEFAULT_MODELS = {"tier1": None, "tier2": None, "tier3": None, "review": None}
     TIER_KEY = {"TIER-1": "tier1", "TIER-2": "tier2", "TIER-3": "tier3", "TIER-4": "tier3", "TIER-5": "review"}
 
@@ -193,12 +196,16 @@ class BaseInstaller:
 
     def section(self):
         k = self.kit_rel
+        skill_line = (f"- The user can launch orchestration with `{self.SKILL_INVOKE} <task>` "
+                      f"(skill `{self.SKILL_DIR}/SKILL.md`); it runs the same lifecycle as any task."
+                      if self.SKILL_DIR else "")
         return "\n".join([
             f"{MARK_BEGIN} (Universal Orchestrator Kit {KIT_VERSION}, {self.HOST} adapter, enforcement: {self.mode}) -->",
             "## Universal Orchestrator Kit", "",
             f"Kit: `{k}/` (spec, routing policy, contracts). Installed policy: `.orchestrator/policy/`. "
             "Ledger and audit: `.orchestrator/` (runtime dirs are git-ignored).", "",
             self.workers_line(), "",
+            *([skill_line, ""] if skill_line else []),
             "Rules:",
             f"- Classify the task (`{k}/core/TASK-CLASSIFICATION.md`), pick the cheapest sufficient tier "
             f"(`{k}/core/ROUTING-POLICY.md`), delegate to the matching role; escalate on failure, never into TIER-5 "
@@ -238,6 +245,45 @@ class BaseInstaller:
         """Agents/rules, extra instruction files. Hook registration goes in register_hook()."""
         raise NotImplementedError
 
+    def skill_text(self):
+        """SKILL.md for the host-native /uok launcher (verified_doc locations, 2026-11-17)."""
+        k = self.kit_rel
+        return f"""---
+name: uok
+description: "Run a task through the Universal Orchestrator Kit {SKILL_MARK}: classify, route to uok-* roles, enforce claims/approvals/review, report with evidence. Use when the user invokes {self.SKILL_INVOKE} with an engineering task."
+---
+
+You are the **orchestrator** of the Universal Orchestrator Kit (kit {KIT_VERSION}) for this project.
+The user launched this skill to run a task through the kit. Follow the marked UOK section of
+`{self.INSTRUCTION_FILE}` and `.orchestrator/policy/` — they are normative.
+
+Task: $ARGUMENTS
+If the placeholder above was not expanded by the host, or no task text came with the invocation,
+use the user's accompanying message as the task; if there is none, ask for the task before acting.
+
+Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
+1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
+   resolve dependencies (no cycles).
+2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
+   sufficient tier (the ladder is TIER-1…TIER-5; trivial tasks are TIER-1 — there is no TIER-0),
+   matching `uok-*` role; never escalate into TIER-5; exhaustion ⇒ ask the human.
+3. Before parallel writers, record disjoint write claims in `.orchestrator/claims/active.json`;
+   release them when done.
+4. Sensitive operations (production deploy, financial actions, irreversible data changes,
+   credential changes, external publication) require recorded human approval — ask, never
+   auto-approve (SEC-07).
+5. Validate with evidence; high-impact work needs an independent reviewer role on a different
+   model when available; COMPLETED requires evidence, never assertions.
+6. Report results with actual command output and a verification status per claim
+   (`verified_live` only if executed). Failures and degradations are reported honestly.
+"""
+
+    def step_skill(self):
+        if not self.SKILL_DIR:
+            return
+        self.write_managed(self.p(self.SKILL_DIR, "SKILL.md"), self.skill_text(),
+                           f"orchestrator launcher skill ({self.SKILL_INVOKE})", marker=SKILL_MARK)
+
     def register_hook(self):
         raise NotImplementedError
 
@@ -264,8 +310,8 @@ class BaseInstaller:
     def run(self):
         if not os.path.isdir(self.root):
             sys.exit(f"project directory not found: {self.root}")
-        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.host_steps, self.step_ignores,
-                     self.register_hook):   # the hook file exists before the host config points to it
+        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.host_steps, self.step_skill,
+                     self.step_ignores, self.register_hook):   # the hook file exists before the host config points to it
             step()
         results = self.verify()
         print(f"Universal Orchestrator Kit {KIT_VERSION} — {self.HOST} adapter "
@@ -284,8 +330,10 @@ class BaseInstaller:
         return 0 if all("(exit 0)" in r or r.endswith("PASS") for r in results) else 1
 
     def next_steps(self):
+        skill = (f" Launch orchestration with `{self.SKILL_INVOKE} <task>` after the restart."
+                 if self.SKILL_DIR else "")
         return (f"next: restart the {self.HOST} session, run the live checks in the adapter README §13, and fill "
-                f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md.")
+                f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md." + skill)
 
 
 def cli(installer_cls, doc):

@@ -1,12 +1,11 @@
 schema: adapter_profile
 schema_version: 1
 adapter: claude-code
-researched_at: "2026-11-16"
+researched_at: '2026-11-16'
 capabilities:
   instruction_files:
     status: verified_doc
-    native_mechanism: CLAUDE.md / CLAUDE.local.md / ~/.claude/CLAUDE.md; @imports
-      <=4 hops
+    native_mechanism: CLAUDE.md / CLAUDE.local.md / ~/.claude/CLAUDE.md; @imports <=4 hops
     evidence: https://code.claude.com/docs/en/memory
     fallback: null
   custom_agents:
@@ -31,20 +30,18 @@ capabilities:
     fallback: null
   worktree_isolation:
     status: verified_live
-    native_mechanism: 'subagent isolation: worktree -> .claude/worktrees/<name>, own
-      branch'
+    native_mechanism: 'subagent isolation: worktree -> .claude/worktrees/<name>, own branch'
     evidence: live probe with claims, 2026-11-17 (needs a git repo with a commit)
     fallback: resource_lock
   blocking_hooks:
     status: verified_live
-    native_mechanism: PreToolUse; permissionDecision deny/ask; agent_type in subagent
-      events; missing script blocks all matched calls
+    native_mechanism: PreToolUse; permissionDecision deny/ask; agent_type in subagent events; missing
+      script blocks all matched calls
     evidence: g1.log + live denies, 2026-11-17
     fallback: null
   permission_modes:
     status: verified_live
-    native_mechanism: 'permissions.deny/ask: Read()/Edit()/Bash() rules apply; Write(path)
-      ignored'
+    native_mechanism: 'permissions.deny/ask: Read()/Edit()/Bash() rules apply; Write(path) ignored'
     evidence: curl deny live; CLI warning on Write rules, 2026-11-17
     fallback: orchestrator_pre_dispatch_checks
   mcp:
@@ -54,8 +51,7 @@ capabilities:
     fallback: null
   headless_invocation:
     status: verified_live
-    native_mechanism: claude -p (needs CLI login); loads project hooks/settings; ask
-      => not run
+    native_mechanism: claude -p (needs CLI login); loads project hooks/settings; ask => not run
     evidence: 2026-11-17, CLI 2.1.325
     fallback: null
   context_isolation:
@@ -64,7 +60,14 @@ capabilities:
     evidence: https://code.claude.com/docs/en/sub-agents
     fallback: null
   nesting:
-    status: verified_doc
-    native_mechanism: up to 3 layers by default
+    status: unverified
+    native_mechanism: depth limit exists; exact default unverified (published sources conflict)
     evidence: https://code.claude.com/docs/en/sub-agents
     fallback: flatten_hierarchy
+  skills:
+    status: verified_doc
+    native_mechanism: '.claude/skills/<name>/SKILL.md; frontmatter name/description/argument-hint/ allowed-tools/disable-model-invocation;
+      user invokes /<name>; $ARGUMENTS expands to the invocation arguments; user-level (all projects):
+      ~/.claude/skills/uok-init/SKILL.md via `uok bootstrap`'
+    evidence: https://code.claude.com/docs/en/skills (2026-11-17)
+    fallback: null

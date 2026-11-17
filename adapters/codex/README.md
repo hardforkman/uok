@@ -124,14 +124,19 @@ to learn.chatgpt.com/docs — both are official; cite the final URL).
 
 ## 12. Installation procedure
 
-Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+Primary path: type `uok init` (or the `$uok-init` mention) in the project session — the user-level
+`uok-init` skill (registered once by `python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`; global skills
+live in `~/.agents/skills/` [verified_doc: learn.chatgpt.com/docs/build-skills]) runs
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init --host codex`, which dispatches to this installer.
+
+Direct invocation from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
 
 ```bash
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/codex/install.py --dry-run
 python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/codex/install.py --models tier1=<model>,tier2=<model>,tier3=<model>,review=<model>
 ```
 
-It writes `.codex/agents/uok_<role>.toml` (`name`, `description`, `developer_instructions`, and an optional `model`; `[features] shell_tool = false` for shell-less roles) [verified_doc: learn.chatgpt.com/docs/agent-configuration/subagents]. It also writes the marked section in `AGENTS.md`, `.orchestrator/` with policy files, and the shared G1 hook. It registers PreToolUse in `.codex/hooks.json` with `--format codex` [verified_doc: learn.chatgpt.com/docs/hooks]. Without `--models` the agents inherit the session model.
+It writes `.codex/agents/uok_<role>.toml` (`name`, `description`, `developer_instructions`, and an optional `model`; `[features] shell_tool = false` for shell-less roles) [verified_doc: learn.chatgpt.com/docs/agent-configuration/subagents]. It also writes the marked section in `AGENTS.md`, the launcher skill `.agents/skills/uok/SKILL.md` (invoke with the `$uok` mention plus the task in the same message — Codex skills are not slash commands, and custom prompts are deprecated) [verified_doc: learn.chatgpt.com/docs/build-skills, /docs/skills-and-plugins, /docs/custom-prompts], `.orchestrator/` with policy files, and the shared G1 hook. A user-authored `uok` skill is kept untouched. It registers PreToolUse in `.codex/hooks.json` with `--format codex` [verified_doc: learn.chatgpt.com/docs/hooks]. Without `--models` the agents inherit the session model.
 
 After installing, trust the project `.codex/` layer and review/trust the hook with `/hooks`: Codex skips untrusted hooks.
 
@@ -140,7 +145,7 @@ Degradations: PreToolUse cannot ask, so SEC-07 operations are denied with a "hum
 ## 13. Verification procedure
 
 - Level 2: profiles parse (`codex --profile uok-orchestrator` dry check);
-  backups intact.
+  `$uok` resolves to the kit skill; backups intact.
 - Level 3 safe probes: `codex exec --json "list files in ."` (read-only
   default) as TIER-1 probe; subagent dispatch probe if enabled; hook denial
   probe in scratch dir; approval-gate probe (simulated sensitive op must

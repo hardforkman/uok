@@ -206,7 +206,8 @@ def route(task: dict, policy: dict, models: list, roles: dict,
         models = [m for m in models
                   if not (implementer and m["id"] == implementer.get("model_id"))]
         if implementer and not any(
-            m.get("family") != implementer.get("family") for m in models
+            m.get("family") != implementer.get("family")
+            for m in models if "TIER-5" in m.get("tier_affinity", [])
         ):
             flags.append("degraded_independence")
 
