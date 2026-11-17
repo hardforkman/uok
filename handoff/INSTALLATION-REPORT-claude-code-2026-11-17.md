@@ -129,3 +129,19 @@ Final maturity: claude-code adapter `integration_tested`; all 10 roles, aliases 
 Kit tests after these changes: self_test 16/16, behavior_tests 29/29.
 
 Remaining: native worktree run (needs `git init` in UNIORK or a git project), headless (needs CLI login), Claude Code permission rules, real multi-writer parallel workflow.
+
+## Native worktree isolation (live, 2026-11-17)
+
+`git init` in /Users/snm/UNIORK (user-approved), two commits. Fix found: `.orchestrator/.gitignore` ignored `*`, so `hooks/` and `policy/` were not tracked and would be missing in worktrees; now only `tasks/ audit/ claims/ routing/` are ignored. `.claude/worktrees/` added to root `.gitignore`.
+
+Probe: `uok-implementation-engineer` dispatched with Claude Code worktree isolation, claim `probe/a/*`.
+
+| Event | Expected | Actual (g1.log) |
+|---|---|---|
+| agent cwd | inside `.claude/worktrees/` | `/Users/snm/UNIORK/.claude/worktrees/agent-…`, own branch |
+| Write `probe/a/x.txt` in worktree | allow | `allow: [uok-implementation-engineer] Write …/probe/a/x.txt` |
+| Write `src/y.txt` in worktree | deny (LC-04) | `deny: … write outside … claimed paths (LC-04): src/y.txt` |
+
+Status: worktree isolation `verified_live`. Probe worktree, branch and claims removed.
+
+Remaining: headless (CLI login required), Claude Code permission rules, real multi-writer parallel workflow.
