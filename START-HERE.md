@@ -38,6 +38,17 @@ Go directly to
 It is independently executable: inspect → audit → plan → implement → validate
 → report. Do not stop at a plan unless genuinely blocked.
 
+**Fast path.** If your environment's adapter directory contains an `install.py`,
+it performs directive steps 8-12 for you (additive, idempotent, with backups):
+
+| Environment | Installer | Status |
+|---|---|---|
+| Claude Code | `python3 adapters/claude-code/install.py --dry-run`, then without `--dry-run` | integration_tested (2026-11-17) |
+| Qoder, Cursor, Codex, other | none yet: follow the directive with your adapter README | specification_complete |
+
+You still do steps 1-7 (identify, inspect, read, audit) and step 13 (report),
+and you pass the model aliases you actually probed (`--models`).
+
 ## Quick validation
 
 ```bash

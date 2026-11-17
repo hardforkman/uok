@@ -61,7 +61,7 @@ Date: 2026-11-17, same session. Remaining roles and aliases dispatched with triv
 | 13 | Aliases opus/haiku/fable | verified_live | No resolution error; every alias resolved to a current model. |
 | 14 | security-reviewer cannot write | verified_live (tool-level) | Its tool set is Read, Bash, SubagentHandback: no Write tool exists. Write was not attempted, so G1 was not exercised for this; block is by tool provisioning. Note it does have (restricted) Bash. |
 | 15 | documentation-specialist has no Bash | verified_live | Tools: Read, Write, Edit, Grep, Glob, SubagentHandback. No Bash. |
-| 16 | senior-engineer secret payload denied | verified_live | Write `probe/n.txt` with `password=abcdefghij0123456789xyz` (claim `probe/n.txt` was set for it) -> `[UOK G1] secret-like content in write payload blocked (SEC-03)`; g1.log has matching deny; file not created. |
+| 16 | senior-engineer secret payload denied | verified_live | Write `probe/n.txt` with a secret-like `password=<20+ chars>` value (claim `probe/n.txt` was set for it) -> `[UOK G1] secret-like content in write payload blocked (SEC-03)`; g1.log has matching deny; file not created. |
 | 17 | release-integration `git push --force origin main` returns `ask` | FAILED as specified (still blocked) | Actual: hard deny `[UOK G1] uok-release-integration: command not in shell_allowlist (SEC-04): git push --force origin main`; no prompt shown. Expected: `ask` (SEC-07). The command was blocked, so the safety outcome holds, but the ask path was not exercised. |
 | 18 | Kit tests re-run | verified_live | self_test.py 16 PASS; behavior_tests.py "29 checks passed, 0 failed". |
 
@@ -92,12 +92,12 @@ Kit tests after the fix: self_test 16/16, behavior_tests 29/29. The `ask` path h
 
 ## Live verification, part 3
 
-Date: 2026-11-17. G1 `ask` path after the hook fix. Command in both cases: `rm -rf probe/ask-test-nonexistent` (target does not exist; nothing was executed in either case).
+Date: 2026-11-17. G1 `ask` path after the hook fix. Command in both cases: `rm -rf probe/ask_probe_missing` (target does not exist; nothing was executed in either case).
 
 | Event | Expected | Actual | Prompt shown / user choice |
 |-------|----------|--------|----------------------------|
 | `uok-release-integration` runs the command | G1 `ask` (SEC-07, irreversible_data_change) | g1.log `2026-11-17T01:38:15 ask: sensitive operation 'irreversible_data_change' requires human approval (SEC-07)`. The harness then reported the agent as stopped by the user; the command did not run and the agent sent no final report. | Prompt was raised; user declined (inferred from the agent being stopped by the user, not from a verbatim message). No retry. verified_live (ask fired), user choice inferred. |
-| `uok-test-engineer` runs the command | hard deny, no prompt | Hook error `[UOK G1] uok-test-engineer: command not in shell_allowlist (SEC-04): rm -rf probe/ask-test-nonexistent`; g1.log `01:38:15 deny: ... (SEC-04)`. | No prompt. verified_live. |
+| `uok-test-engineer` runs the command | hard deny, no prompt | Hook error `[UOK G1] uok-test-engineer: command not in shell_allowlist (SEC-04): rm -rf probe/ask_probe_missing`; g1.log `01:38:15 deny: ... (SEC-04)`. | No prompt. verified_live. |
 
 Notes:
 - g1.log contains a second, earlier `ask` line (`01:37:19`, same operation) that was not produced by this part's dispatch (probably from the dispatching session's own test). `ask` entries carry no agent name, so the 01:38:15 line is attributed to the release agent by timing (same second as the test-engineer deny) rather than by identity. Suggest adding the agent name to `ask` log lines.
@@ -145,3 +145,49 @@ Probe: `uok-implementation-engineer` dispatched with Claude Code worktree isolat
 Status: worktree isolation `verified_live`. Probe worktree, branch and claims removed.
 
 Remaining: headless (CLI login required), Claude Code permission rules, real multi-writer parallel workflow.
+
+## Permissions, headless, parallel agents, security hardening (2026-11-17)
+
+**Permission rules** (`.claude/settings.json`): deny `Read(...)`/`Edit(...)` for secret names at any depth, `~/.ssh/**`, `~/.aws/**`, `Bash(curl:*)`, `Bash(wget:*)`; ask `Bash(git push:*)`, `Bash(rm -rf:*)`. Live: `curl` from the main session was let through by G1 and denied by the rule (`verified_live`). Headless CLI 2.1.325 reported that `Write(path)` rules are not applied ("only Edit(path) rules are"); they were removed. The final settings load in headless without warnings (`verified_live`).
+
+**Headless**: after CLI login, `claude -p` answers (`verified_live`). In headless mode a G1 `ask` (`git push --force`) has no human, and the command was not run (`verified_live`).
+
+**Parallel agents on a real task**: `uok-test-engineer` (hook tests) and `uok-documentation-specialist` (hook README) ran concurrently with disjoint claims; no claim conflicts in g1.log. `uok-code-reviewer` rejected round 1 (test harness could not tell a crash from allow; stale README), the rework was done in parallel again, and round 2 was approved. The test engineer's strict test found a real hook bug (silent fail-open on a malformed `active.json`), which was fixed in the hook.
+
+**Security hardening**: six rounds of independent `uok-security-reviewer` review. Rounds 1-5 rejected with concrete bypasses, all fixed with regression tests; round 6 approved with no blocking findings. Main design changes:
+- uok-* shell became an exact-command allowlist with a fixed character set. `cat`/`grep`/`pytest` were removed; search goes through `uok_search.py`.
+- Path checks use the on-disk spelling (APFS case and Unicode folding, e.g. U+017F), and paths outside ASCII are denied for uok.
+- Guard controls are write-protected for uok: `.claude/`, `.git/`, `.orchestrator/`, `CLAUDE.md` at any depth, `.mcp.json`, kit `validation/` and `core/`.
+- Sensitive-operation detection is token-based and linear. Path length is capped, and huge inputs fail closed.
+- uok MCP, Grep and Glob are denied; any hook error on a uok call fails closed.
+- Secret scanning covers every string, key and `key=value` pair, without JSON escaping.
+
+Hook tests: 104 pass (`python3 -I .orchestrator/hooks/test_g1_guard.py`). Kit tests: self_test 16/16, behavior_tests 29/29.
+
+Residual (non-blocking, documented in `.orchestrator/hooks/README.md` §10): with no claims, uok writers may write any unprotected in-root path; WebFetch/WebSearch are not hooked; `git diff` shows tracked secret files; hook-timeout behaviour is unverified; some main-session destructive forms (`eval`, `find -delete`, `git branch -D`, …) are not recognised. Per CLAUDE.md, a **human review** of the guard is still required for security-critical work.
+
+Maturity: claude-code adapter `integration_tested`. Not `operationally_verified`: there has been no real project workload and no human security review yet.
+
+## Portability rework (2026-11-17)
+
+The earlier installation drifted from the directive. Machine paths were hard-coded, the adapter was mixed into the project, and the worker sandbox was always on. It was reworked as the directive intends:
+
+- **Adapter payload in the kit.** `adapters/claude-code/payload/hooks/` holds `g1_guard.py`, `uok_search.py`, the tests and the README. `adapters/claude-code/install.py` applies directive steps 8-12. It is additive and idempotent, supports `--dry-run`, and backs up every file it modifies. It installs the hook before registering it, merges `settings.json` while keeping the user's hooks and rules, never overwrites user-authored agents, writes the CLAUDE.md section between markers, and runs the hook tests and a smoke event. START-HERE and the directive point receiving agents to it.
+- **No machine paths in policy.** `shell_allowlist` uses `{root}`, the kit location is `kit_dir` in `.orchestrator/policy/claude-code.yaml`, and the hook command uses `$CLAUDE_PROJECT_DIR`.
+- **Modes.**
+  - `standard` is the default. It keeps secrets protection, the root boundary, secret scanning, SEC-07 human approval, claims, guard files write-protected for workers, and a deny of sensitive operations for `sensitive_ops: never` roles.
+  - `strict` is opt-in. It adds the worker sandbox from the security reviews.
+  - UNIORK now runs in `standard`.
+- **Tests.** 114 pass under unittest and under pytest (the strict suite plus a standard suite).
+
+**AC-12 (fresh agent, other environment), `verified_live`.** A headless Claude Code session (`claude -p`, Sonnet) with no context from this session was given a new project. The project already had a user `CLAUDE.md`, a `settings.json` with an allow rule, a deny rule and a PostToolUse hook, and a user agent. Told only to follow START-HERE, the agent:
+- found the installer, ran a dry run, then the install, and a second idempotent run;
+- kept every user rule, hook and agent;
+- wrote `handoff/INSTALLATION-REPORT.md`;
+- reported its unverified items honestly.
+
+It also found a real defect: under pytest, `load_tests` was ignored and 27 strict tests ran in standard mode and failed. This was fixed in the test file.
+
+A side effect observed during the rework: with the hook script moved, every tool call in the open session was blocked until the file was restored (missing hook ⇒ exit 2). This is documented in the adapter README §9 and the hook README §10.
+
+Maturity: claude-code `integration_tested`; the other adapters remain `specification_complete` (no installer, not run live).

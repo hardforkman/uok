@@ -1,153 +1,150 @@
 # Adapter: Claude Code
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: specification_complete
-Research date: 2026-11-16 · Sources: code.claude.com/docs (official)
-Status tags: `verified_doc` = read in official docs on the research date;
-`unverified` = plausible but not confirmed this session; re-verify locally.
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: integration_tested
+Research date: 2026-11-16 · Live verification: 2026-11-17, Claude Code 2.1.325 (desktop app + CLI), macOS
+Status tags: `verified_doc` = read in official docs; `verified_live` = executed and observed in a
+real Claude Code session; `unverified` = plausible, not confirmed. Re-verify in your version.
+
+**Quick install** (from the project root that contains the kit):
+
+```bash
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/claude-code/install.py --dry-run
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/claude-code/install.py --models tier1=haiku,tier2=sonnet,tier3=opus,review=opus
+```
+
+Then restart the session: agents load at session start. See §12 for options and §13 for the
+live checks to run afterwards.
 
 ## 1. Environment discovery
 
-- Detect: `command -v claude`; presence of `.claude/` (project) or
-  `~/.claude/` (user); `CLAUDE.md` in repo root. [unverified: exact binary
-  name/flags — confirm with `claude --help`]
-- Runtime modes: interactive TUI, IDE extension, headless (`-p` print mode),
-  SDK. Verify capabilities per mode; headless still runs project hooks and
-  `.mcp.json` servers with no interactive trust dialog. [unverified — confirm
-  in docs `code.claude.com/docs/en/headless` and locally]
+- Detect: a `.claude/` dir or `CLAUDE.md` in the project, `~/.claude/` for the user, the agent's
+  own tool inventory (Agent/Task tool, `mcp__*` tools). The `claude` binary may not be on PATH:
+  the desktop app ships it under `~/Library/Application Support/Claude/claude-code/<version>/`
+  [verified_live].
+- Runtime modes: desktop app / TUI, IDE extension, headless (`claude -p`), SDK. Headless needs
+  the CLI to be logged in separately (`claude /login`) [verified_live].
 - Inspect read-only: `.claude/settings.json`, `.claude/settings.local.json`,
-  `~/.claude/settings.json`, `.claude/agents/`, `.mcp.json`, `CLAUDE.md`.
-  Never copy secrets found there into notes.
+  `~/.claude/settings.json`, `.claude/agents/`, `.mcp.json`, `CLAUDE.md`. Never copy secrets.
 
 ## 2. Native agent capabilities
 
-- Subagents: markdown files with YAML frontmatter in `.claude/agents/`
-  (project) and `~/.claude/agents/` (user). Frontmatter fields: `name`,
-  `description`, `tools`, `model`. [verified_doc: code.claude.com/docs/en/sub-agents]
-- Invocation: natural-language delegation, `@`-mention, or `--agent` flag.
-  [verified_doc: same]
-- Each subagent runs in its own context window; intermediate output does not
-  clutter the main conversation → maps to ISO-03 context isolation.
-  [verified_doc: same]
-- Nesting: permitted up to three layers by default. [verified_doc: same —
-  re-verify for your version; kit policy: orchestrator spawns workers;
-  workers do not spawn further orchestrators]
+- Subagents are markdown files with YAML frontmatter (`name`, `description`, `tools`, `model`)
+  in `.claude/agents/` [verified_doc, verified_live].
+- The agent registry loads at **session start**: agents created mid-session are not dispatchable
+  until a new session [verified_live].
+- Each subagent has its own context window (ISO-03) [verified_doc]. Hook events from subagents
+  carry `agent_id` and `agent_type` [verified_live], which the G1 guard uses to tell workers
+  from the orchestrator.
+- The tools a subagent really gets can differ from its `tools:` line. In 2.1.325 subagents had
+  no Grep/Glob tools [verified_live]. Probe with a trivial dispatch.
 
 ## 3. Model selection
 
-- Per-agent `model` frontmatter: aliases (e.g. `sonnet`, `opus`, `haiku`,
-  `fable`) or full model IDs. [verified_doc: sub-agents page]
-- Tier mapping (configure in MODEL-CONFIG.yaml after probing your account):
-  TIER-1 → fast alias; TIER-2/TIER-3 → standard/advanced alias; TIER-5 →
-  strongest available reasoning model, ideally a different family than the
-  implementer. Aliases are environment conveniences, NOT architectural
-  dependencies (RT-04): the registry binds tiers to whatever your account
-  exposes.
-- Session-level model switching exists (`/model`); exact behavior `unverified`.
+- `model` frontmatter accepts aliases or full IDs. `haiku`, `sonnet`, `opus`, `fable` resolved
+  on the verification account [verified_live]; your account may differ.
+- Tier mapping (installer `--models`): TIER-1 → `tier1`, TIER-2 → `tier2`, TIER-3/4 → `tier3`,
+  reviewers (TIER-5) → `review`. Give reviewers a model different from the implementers
+  (QA-01). Same provider family remains a documented degradation: human review for critical work.
+- Aliases are environment conveniences, not architectural dependencies (RT-04).
 
 ## 4. Custom agent support
 
-Map kit roles → `.claude/agents/<role>.md`:
-- `name` = role id; `description` = role responsibilities + "use for …"
-  triggers (drives implicit delegation).
-- `tools` = role allowlist (SEC-04): reviewers get read-only tools;
-  implementation roles get edit/write + restricted shell.
-- `model` = tier binding from MODEL-CONFIG.yaml.
-- Body = role prompt: responsibilities, expected outputs, validation rules,
-  envelope checks (HANDOFF-CONTRACT §1), injection resistance (SEC-05),
-  and "report via result_submit semantics with evidence".
-Install additively; never overwrite user-authored agent files (NS-10).
+`install.py` generates `.claude/agents/uok-<role>.md` from `core/AGENT-CAPABILITIES.yaml`:
+- `name` = role id, `description` = responsibilities + "(Universal Orchestrator Kit role)" marker;
+- `tools` from role permissions (read-only roles get no Write/Edit; `shell: none` → no Bash);
+- `model` from the tier binding; the body holds responsibilities, outputs, validation and
+  operating rules (envelope scope, SEC-05 injection resistance, evidence).
+A file of the same name without the marker is user-authored: the installer leaves it alone and
+reports it (NS-10).
 
 ## 5. Parallel execution
 
-- Background subagents run concurrently. [verified_doc: sub-agents page]
-- Kit rule: dispatch parallel workers only with satisfied dependencies and
-  disjoint write claims (LC-03/04). Use the `.orchestrator/claims/` ledger or
-  git worktrees per writer; Claude Code worktree conventions exist
-  [unverified — confirm docs]. Merge via release_integration role.
+- Background subagents run concurrently [verified_live: two writers in parallel on disjoint files].
+- Kit rule: dispatch parallel writers only with satisfied dependencies and disjoint write claims
+  (LC-03/04). The orchestrator records claims in `.orchestrator/claims/active.json`; the G1 hook
+  denies writes outside the caller's claim or inside another's [verified_live].
+- Worktree isolation: subagent `isolation: worktree` creates `.claude/worktrees/<name>/` on its
+  own branch; claims map worktree paths back to repo-relative paths [verified_live]. It needs a
+  git repository with at least one commit.
 
 ## 6. Tool integration
 
-- `tools` frontmatter allowlists per agent. [verified_doc]
-- MCP servers via `.mcp.json` (project) and user config. [unverified: exact
-  schema — confirm `code.claude.com/docs/en/mcp`]
-- Map `required_tools` (tool plane) onto the union of agent allowlist ∩
-  project permission rules; deny-by-default for anything undeclared.
+- `tools` frontmatter allowlists per agent [verified_doc].
+- MCP tools appear as `mcp__<server>__<tool>`; the hook matcher `mcp__.*` sees them
+  [verified_live]. Kit agents do not list MCP tools.
 
 ## 7. Context management
 
-- Instruction files: `CLAUDE.md` (project root or `.claude/`),
-  `CLAUDE.local.md`, `~/.claude/CLAUDE.md`, enterprise-managed locations;
-  loaded broadest→most-specific; `@path` imports (≤4 hops).
-  [verified_doc: code.claude.com/docs/en/memory]
-- Kit binding: append a marked section to project `CLAUDE.md` pointing to
-  the kit and `.orchestrator/` ledger; keep per-task context in envelopes,
-  not in global memory (ISO-03). Subagent context isolation is native (§2).
+- `CLAUDE.md` (project root), `CLAUDE.local.md`, `~/.claude/CLAUDE.md` [verified_doc].
+- The installer writes a section between `<!-- UOK:BEGIN … -->` and `<!-- UOK:END -->`.
+  User text outside the markers is preserved, and a rerun replaces only the section.
 
 ## 8. Permissions
 
-- Settings files: `~/.claude/settings.json`, `.claude/settings.json`
-  (+ `.local`). `permissions.deny` and
-  `permissions.blockReadsOutsideWorkingDirectories` observed in docs;
-  full allow/ask rule syntax `unverified` — confirm
-  `code.claude.com/docs/en/settings` / `iam` before writing rules.
-- Kit mapping: project grants → permission rules; sensitive operations
-  (SEC-07) → deny rules + orchestrator approval gate (never auto-approve).
-- Plan mode exists as a behavioral mode. [verified_doc: memory page mention]
+- `permissions.deny` / `permissions.ask` rules in `.claude/settings.json` apply [verified_live:
+  a `Bash(curl:*)` deny blocked a command the hook allowed].
+- `Read(path)` and `Edit(path)` rules apply to file tools; **`Write(path)` rules are ignored**
+  (the CLI warns: "only Edit(path) rules are") [verified_live]. The installer writes only Read and
+  Edit path rules.
+- Never write bypass modes for kit agents (SEC-01/10).
 
 ## 9. Hooks and events
 
-- Config: `~/.claude/settings.json`, `.claude/settings.json`. Events include
-  `PreToolUse`, `PostToolUse`, `SessionStart` (full list `unverified` — see
-  `code.claude.com/docs/en/hooks`). Matchers: exact strings, `|`, regex.
-  Hooks block via exit code 2 or JSON `permissionDecision: "deny"`.
-  [verified_doc: hooks page]
-- Kit G1 enforcement: `PreToolUse` hook denying (a) writes outside claimed
-  paths, (b) reads of other projects without a grant, (c) secret-pattern
-  content in outbound payloads where feasible. Hook scripts live in
-  `.orchestrator/hooks/` and are registered additively.
+- `PreToolUse` hooks in `settings.json`; decision via JSON `permissionDecision`:
+  `deny` / `ask` [verified_live]; `timeout` per hook.
+- **A missing hook script blocks every matched tool call** (python exits 2 → blocking error)
+  [verified_live]. The installer copies the hook before it registers it. Never move
+  `.orchestrator/hooks/` while a session is open.
+- In headless mode an `ask` has no human, so the call is not run [verified_live].
+- The kit's G1 guard: `payload/hooks/g1_guard.py`, documented in `payload/hooks/README.md`
+  (modes `standard` / `strict`, 114 tests).
 
 ## 10. External API integration
 
-- Headless mode (`claude -p`) for scripted role sessions [unverified: exact
-  flags]; SDK for programmatic orchestration [unverified].
-- Provider APIs for TIER routing outside the session: use registry
-  `auth_env` references; the kit never stores keys.
-- Use external runtimes only when native subagents cannot satisfy a plane
-  (fallback ladder, ADAPTER-IMPLEMENTATION-SPEC §4).
+- Headless `claude -p "<prompt>"` for scripted role sessions [verified_live]; it loads project
+  hooks and settings and prints settings warnings [verified_live].
+- Provider APIs for routing outside the session: registry `auth_env` names only; the kit never
+  stores keys.
 
 ## 11. Limitations
 
-- Nesting depth capped (3 by default, verified_doc) — deep hierarchies must
-  be flattened by the orchestrator.
-- Per-agent model selection is alias/ID-based; cross-family independence for
-  G3 requires a second provider configured — if unavailable, degrade to
-  second instance or human review and record it.
-- Headless mode has no interactive trust dialog: approval gates MUST be
-  enforced by hooks/permission rules + orchestrator blocking, not by prompts.
-- Anything tagged `unverified` above is a research gap, not a product claim.
+- The subagent nesting depth is limited; the orchestrator is the main session and workers do not
+  spawn orchestrators.
+- WebFetch/WebSearch are not covered by the hook matcher.
+- A hook timeout is believed to be a non-blocking error (the call proceeds) [unverified]; no
+  known input brings the G1 guard near its 30 s timeout.
+- Per-role tool lists may be reduced at runtime (§2); `strict` mode workers without Bash cannot
+  search and need exact paths in their brief.
 
 ## 12. Installation procedure
 
-1. Follow AUTONOMOUS-IMPLEMENTATION-DIRECTIVE steps 1–7 (discover, audit,
-   matrix, gaps, plan).
-2. Back up `.claude/settings.json`, `CLAUDE.md`, existing agents.
-3. Create `.claude/agents/uok-*.md` for enabled roles (prefix avoids
-   collisions with user agents).
-4. Append marked kit section to `CLAUDE.md`; create `.orchestrator/`
-   (tasks/, audit/, claims/, hooks/) + `.gitignore` entry.
-5. Register G1 `PreToolUse` hook additively; verify it blocks a deliberate
-   out-of-claim write probe in a scratch directory.
-6. Fill templates → project config (MODEL-CONFIG from probed model list).
-7. Run validation (step 12 of the directive).
+`install.py [--project DIR] [--mode standard|strict] [--models tier1=…,tier2=…,tier3=…,review=…] [--dry-run]`
+
+1. Discover and audit (directive steps 1-7). Probe which model aliases your account really has
+   (`/model`) and pass them with `--models`.
+2. Run with `--dry-run` and read the plan. Every modified file is backed up to
+   `.orchestrator/backups/<timestamp>/`.
+3. Run for real. The installer:
+   - copies the G1 hook to `.orchestrator/hooks/` before registering it;
+   - writes the policy files (`.orchestrator/policy/project.yaml`, `models.yaml`, `agents.yaml`,
+     `claude-code.yaml`), keeping existing ones;
+   - writes the `uok-*` agents and the CLAUDE.md section;
+   - merges `.claude/settings.json`: adds the hook and the deny/ask rules, keeps everything else;
+   - adds the ignore entries;
+   - runs the hook test suite and a smoke event.
+4. Restart the session. Re-running is idempotent; it is also the upgrade path.
+
+Default mode is `standard`. Use `strict` only when workers must be sandboxed.
 
 ## 13. Verification procedure
 
-- Level 2: re-read installed files; `claude` lists the new agents
-  [unverified: exact command — check `/agents` in TUI]; existing agents intact.
-- Level 3 (safe probes): dispatch a read-only research subagent (TIER-1/2);
-  verify isolated context returns a result; trigger the G1 hook with a
-  harmless denied write; confirm approval gate blocks a simulated
-  `production_deploy` task. Record `verified_live` per probe.
-- Level 4: run a real 3-task package (implement → test → independent review)
-  end-to-end; archive evidence in the installation report.
-- See ../validation/COMPATIBILITY-TESTS.md §3 for the canonical probe list.
+- Level 2: the installer's summary shows `hook test suite: OK` and `smoke event … PASS`.
+- Level 3 (new session):
+  - dispatch `uok-research-analyst` read-only and confirm the result;
+  - have a worker attempt a write to `.claude/settings.json` (must be denied);
+  - with a claims file, a write outside the claim must be denied;
+  - a sensitive command from `uok-release-integration` must produce a prompt;
+  - in headless mode, `claude -p` must answer.
+  Record each probe as `verified_live`.
+- Level 4: a real task package (implement → test → independent review) end to end.
+- Canonical probe list: ../../validation/COMPATIBILITY-TESTS.md §3.

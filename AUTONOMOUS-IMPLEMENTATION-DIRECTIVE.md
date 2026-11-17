@@ -78,6 +78,10 @@ environment requires approval for config changes, request it here.
 
 ## Step 8 — Implement the native adapter
 
+If your adapter ships an installer (`adapters/<env>/install.py`), run it with
+`--dry-run`, review the plan, then run it; it covers steps 8-12 and prints what
+it changed and verified. Otherwise create the adapter artifacts manually.
+
 Create the adapter artifacts in the target project/user config:
 - instruction-file section or rules that bind the agent to this kit's
   lifecycle, routing, isolation, and gates;

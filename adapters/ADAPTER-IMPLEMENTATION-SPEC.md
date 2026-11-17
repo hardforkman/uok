@@ -94,7 +94,11 @@ real permissions. Otherwise mark `not_implemented` with the reason.
 4. Keep secrets out of all created files; reference env vars only.
 5. Create `.orchestrator/` (tasks/, audit/, claims/) and add it to
    `.gitignore` unless the user wants it committed.
-6. Installation itself obeys SEC-07: modifying credential/access-control
+6. Adapters SHOULD ship an idempotent installer (`install.py`) that applies
+   rules 1-5, supports `--dry-run`, never embeds machine-specific absolute
+   paths in committed policy, installs any hook script before registering it,
+   and runs the adapter's self-checks. Re-running it is the upgrade path.
+7. Installation itself obeys SEC-07: modifying credential/access-control
    config or anything production-affecting needs explicit human approval.
 
 ## 6. Verification requirements (ADP-03)

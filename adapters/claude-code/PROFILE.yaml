@@ -5,61 +5,66 @@ researched_at: "2026-11-16"
 capabilities:
   instruction_files:
     status: verified_doc
-    native_mechanism: "CLAUDE.md / CLAUDE.local.md / ~/.claude/CLAUDE.md; @imports <=4 hops"
-    evidence: "https://code.claude.com/docs/en/memory"
+    native_mechanism: CLAUDE.md / CLAUDE.local.md / ~/.claude/CLAUDE.md; @imports
+      <=4 hops
+    evidence: https://code.claude.com/docs/en/memory
     fallback: null
   custom_agents:
-    status: verified_doc
-    native_mechanism: ".claude/agents/*.md, ~/.claude/agents/*.md; frontmatter name/description/tools/model"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    status: verified_live
+    native_mechanism: .claude/agents/*.md; registry loads at session start
+    evidence: live dispatch of all 10 uok-* roles, 2026-11-17
     fallback: null
   per_agent_model_selection:
-    status: verified_doc
-    native_mechanism: "model frontmatter: aliases (sonnet/opus/haiku/fable) or full IDs"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    status: verified_live
+    native_mechanism: 'model frontmatter: haiku/sonnet/opus/fable aliases'
+    evidence: subagents reported Haiku/Sonnet/Opus 5.5 and Fable 5.2, 2026-11-17
     fallback: null
   parallel_dispatch:
-    status: verified_doc
-    native_mechanism: "background subagents run concurrently"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    status: verified_live
+    native_mechanism: background subagents
+    evidence: two writers concurrently on disjoint claims, 2026-11-17
     fallback: null
   background_execution:
-    status: verified_doc
-    native_mechanism: "background subagents"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    status: verified_live
+    native_mechanism: background subagents
+    evidence: '2026-11-17'
     fallback: null
   worktree_isolation:
-    status: unverified
-    native_mechanism: null
-    evidence: "not confirmed this session; check docs/worktrees"
+    status: verified_live
+    native_mechanism: 'subagent isolation: worktree -> .claude/worktrees/<name>, own
+      branch'
+    evidence: live probe with claims, 2026-11-17 (needs a git repo with a commit)
     fallback: resource_lock
   blocking_hooks:
-    status: verified_doc
-    native_mechanism: "PreToolUse/PostToolUse/SessionStart in settings.json; exit 2 or permissionDecision deny"
-    evidence: "https://code.claude.com/docs/en/hooks"
+    status: verified_live
+    native_mechanism: PreToolUse; permissionDecision deny/ask; agent_type in subagent
+      events; missing script blocks all matched calls
+    evidence: g1.log + live denies, 2026-11-17
     fallback: null
   permission_modes:
-    status: unverified
-    native_mechanism: "permissions.deny observed; full rule syntax unconfirmed"
-    evidence: "https://code.claude.com/docs/en/memory (partial)"
+    status: verified_live
+    native_mechanism: 'permissions.deny/ask: Read()/Edit()/Bash() rules apply; Write(path)
+      ignored'
+    evidence: curl deny live; CLI warning on Write rules, 2026-11-17
     fallback: orchestrator_pre_dispatch_checks
   mcp:
-    status: unverified
-    native_mechanism: ".mcp.json (project)"
-    evidence: "not confirmed this session"
+    status: verified_live
+    native_mechanism: mcp__<server>__<tool>; hook matcher mcp__.* sees them
+    evidence: hook log of a real MCP call, 2026-11-17
     fallback: null
   headless_invocation:
-    status: unverified
-    native_mechanism: "claude -p (print mode); runs hooks/.mcp.json without trust dialog"
-    evidence: "secondary research; confirm code.claude.com/docs/en/headless"
+    status: verified_live
+    native_mechanism: claude -p (needs CLI login); loads project hooks/settings; ask
+      => not run
+    evidence: 2026-11-17, CLI 2.1.325
     fallback: null
   context_isolation:
     status: verified_doc
-    native_mechanism: "separate context window per subagent"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    native_mechanism: separate context window per subagent
+    evidence: https://code.claude.com/docs/en/sub-agents
     fallback: null
   nesting:
     status: verified_doc
-    native_mechanism: "up to 3 layers by default"
-    evidence: "https://code.claude.com/docs/en/sub-agents"
+    native_mechanism: up to 3 layers by default
+    evidence: https://code.claude.com/docs/en/sub-agents
     fallback: flatten_hierarchy
