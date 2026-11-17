@@ -1,6 +1,6 @@
 # Adapter: Cursor (IDE / CLI)
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: specification_complete
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: implementation_available
 Research date: 2026-11-16 · Sources: cursor.com/docs (official)
 Cursor's agent surface changes quickly; several items below are `unverified`
 or `not_found`. Treat this adapter as discovery-heavy: audit before binding.
@@ -108,14 +108,16 @@ or `not_found`. Treat this adapter as discovery-heavy: audit before binding.
 
 ## 12. Installation procedure
 
-1. Directive steps 1–7 with extra discovery weight (many unknowns).
-2. Back up `.cursor/rules/`, `AGENTS.md`, hooks config.
-3. Add `uok-orchestrator.mdc` + role `.mdc` files; marked `AGENTS.md`
-   section; `.orchestrator/` ledger + `.gitignore`.
-4. Register blocking hooks per the CURRENT hooks schema (read docs first).
-5. Fill templates; bind tiers to probed CLI `--model` values where headless
-   is used; otherwise document session-level switching procedure.
-6. Run validation.
+Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+
+```bash
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/cursor/install.py --dry-run
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/cursor/install.py
+```
+
+It writes the marked section in `AGENTS.md`, `.cursor/rules/uok-orchestrator.mdc` (`alwaysApply: true`), and one `.cursor/rules/uok-role-<role>.mdc` per role (Agent Requested by description). It also writes `.orchestrator/` with policy files and the shared G1 hook. In `.cursor/hooks.json` (version 1) it registers the hook for `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` (file writes), with `--format cursor` and `failClosed: true` [verified_doc: cursor.com/docs/agent/hooks]. User hooks and rules are kept.
+
+Degradations (the installer prints them): roles are rules run one at a time; hook input has no agent identity, so worker-only rules are instructions; there is no per-role model binding. The `preToolUse` input fields for file writes are `unverified` and are checked live (§13).
 
 ## 13. Verification procedure
 

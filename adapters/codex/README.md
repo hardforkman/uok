@@ -1,6 +1,6 @@
 # Adapter: Codex (OpenAI — CLI / IDE / cloud)
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: specification_complete
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: implementation_available
 Research date: 2026-11-16 · Sources: developers.openai.com/codex (308-redirects
 to learn.chatgpt.com/docs — both are official; cite the final URL).
 
@@ -124,16 +124,18 @@ to learn.chatgpt.com/docs — both are official; cite the final URL).
 
 ## 12. Installation procedure
 
-1. Directive steps 1–7. Back up `AGENTS.md`, `~/.codex/config.toml`,
-   `.codex/config.toml`, profiles, hooks.
-2. Enable `agents.enabled` if using native subagents; set
-   `agents.default_subagent_model`/`max_concurrent_threads_per_session`
-   conservatively.
-3. Create `uok-<role>` profiles (model/effort/sandbox per tier) OR native
-   role agents once the definition mechanism is confirmed.
-4. Marked `AGENTS.md` section; `.orchestrator/` ledger + `.gitignore`.
-5. Register G1 hooks after confirming schema; enable `features.hooks`.
-6. Fill templates; run validation.
+Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+
+```bash
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/codex/install.py --dry-run
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/codex/install.py --models tier1=<model>,tier2=<model>,tier3=<model>,review=<model>
+```
+
+It writes `.codex/agents/uok_<role>.toml` (`name`, `description`, `developer_instructions`, and an optional `model`; `[features] shell_tool = false` for shell-less roles) [verified_doc: learn.chatgpt.com/docs/agent-configuration/subagents]. It also writes the marked section in `AGENTS.md`, `.orchestrator/` with policy files, and the shared G1 hook. It registers PreToolUse in `.codex/hooks.json` with `--format codex` [verified_doc: learn.chatgpt.com/docs/hooks]. Without `--models` the agents inherit the session model.
+
+After installing, trust the project `.codex/` layer and review/trust the hook with `/hooks`: Codex skips untrusted hooks.
+
+Degradations: PreToolUse cannot ask, so SEC-07 operations are denied with a "human must run it" reason. Hook input has no subagent identity. Sandbox and approval settings cannot be set per agent.
 
 ## 13. Verification procedure
 

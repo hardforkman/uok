@@ -1,6 +1,6 @@
 # Adapter: Qoder (CLI / Desktop)
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: specification_complete
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: implementation_available
 Research date: 2026-11-16 · Sources: docs.qoder.com (official)
 Status tags as in ADAPTER-IMPLEMENTATION-SPEC §1.
 
@@ -137,13 +137,14 @@ Instruction/memory files [verified_doc: docs.qoder.com/cli/memory]:
 
 ## 12. Installation procedure
 
-1. Directive steps 1–7. Back up `AGENTS.md`, `.qoder/` artifacts, settings.
-2. Create `.qoder/agents/uok-*.md` for enabled roles (tier bindings from
-   probed model selector; `permissionMode: default`; reviewers read-only).
-3. Add `.qoder/rules/uok.md` (`trigger: always_on`) + marked `AGENTS.md`
-   section; create `.orchestrator/` + `.gitignore` entry.
-4. Register G1 hooks additively (global or per-agent frontmatter).
-5. Fill templates; run validation.
+Run the installer from the project root (additive, idempotent, backups in `.orchestrator/backups/`):
+
+```bash
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/qoder/install.py --dry-run
+python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/qoder/install.py --models tier1=lite,tier2=efficient,tier3=performance,review=performance
+```
+
+It writes `.qoder/agents/uok-<role>.md` (name, description, tools, `disallowedTools` for read-only roles, `model`, `permissionMode: default`). It also writes the marked section in `AGENTS.md`, `.qoder/rules/uok.md` (`trigger: always_on`), `.orchestrator/` with policy files, and the shared G1 hook. It registers PreToolUse in `.qoder/settings.json` with `--format qoder`. User agents with the same name are left untouched and reported. The hook uses Qoder's Claude-compatible event schema [verified_doc: docs.qoder.com/cli/hooks]; the root is resolved via `git rev-parse` at run time. Probe your model selectors before passing `--models`. Restart the Qoder session afterwards.
 
 ## 13. Verification procedure
 

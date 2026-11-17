@@ -1,17 +1,32 @@
-# G1 guard — хук PreToolUse
+# G1 guard — общий хук для всех сред
 
-Kit version: 1.0.0 · Адаптер Claude Code · Файлы: `g1_guard.py` (хук), `uok_search.py` (безопасный поиск для агентов), `test_g1_guard.py` (тесты).
+Kit version: 1.0.0 · Используется адаптерами Claude Code, Qoder, Cursor, Codex · Файлы: `g1_guard.py` (хук), `uok_search.py` (безопасный поиск для агентов), `test_g1_guard.py` (тесты).
 
-Устанавливается командой `python3 <kit>/adapters/claude-code/install.py` (см. README адаптера). Описание соответствует текущему коду.
+Устанавливается установщиком адаптера: `python3 <kit>/adapters/<среда>/install.py` (см. README адаптера). Описание соответствует текущему коду.
 
 ## 0. Режимы (`.orchestrator/policy/claude-code.yaml`, ключ `enforcement`)
 
 - **`standard`** (по умолчанию). Для всех: защита секретов, запрет записи вне проекта, проверка секретов в записи и MCP, подтверждение человека для опасных операций (раздел 5). Для исполнителей `uok-*` дополнительно: запрет записи в управляющие файлы, заявки на запись, запрет опасных операций ролям с `sensitive_ops: never`. Обычные инструменты (Bash, Grep, Glob, MCP) исполнителям доступны.
 - **`strict`**. Всё из `standard`, плюс песочница для `uok-*` из раздела 4 и строгие пункты раздела 3: только точные shell-команды, без Grep/Glob/MCP, без чтения вне проекта, только ASCII-пути, блокировка при любой ошибке хука. Включать, когда исполнителям нельзя доверять код или данные проекта.
 
-Файл `claude-code.yaml` защищён от записи исполнителями. Если его нет, действует `standard`. Живые проверки и шесть раундов ревью безопасности зафиксированы в `UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`.
+Файл с настройками защищён от записи исполнителями. Если его нет, действует `standard`. Живые проверки и шесть раундов ревью безопасности зафиксированы в `UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`.
 
-## 1. Подключение
+## 0а. Среды (`--format`)
+
+| Среда | Формат | Где регистрируется | Чем отличается |
+|---|---|---|---|
+| Claude Code | `claude` (по умолчанию) | `.claude/settings.json`, PreToolUse | эталон; `agent_type` отличает исполнителей `uok-*` |
+| Qoder | `qoder` | `.qoder/settings.json`, PreToolUse | та же схема, что у Claude Code, включая `agent_type` и `ask` |
+| Cursor | `cursor` | `.cursor/hooks.json`: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | ответ `{"permission": …}`, хук всегда отвечает явно (в том числе `allow`); на `beforeReadFile` `ask` становится `deny`; нет идентичности агента |
+| Codex | `codex` | `.codex/hooks.json`, PreToolUse | правки приходят как `apply_patch`: хук извлекает пути и добавленный текст; `ask` не поддерживается, поэтому становится `deny` с причиной «человек должен выполнить сам»; нет идентичности агента |
+
+Корень проекта хук берёт из `UOK_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `QODER_PROJECT_DIR` / `CURSOR_PROJECT_DIR`, иначе по своему расположению (`<корень>/.orchestrator/hooks/`), иначе из рабочего каталога. Команда в конфигурации Qoder, Cursor и Codex ищет хук через `git rev-parse --show-toplevel`, поэтому работает из любой подпапки.
+
+В средах без идентичности агента (Cursor, Codex) правила для исполнителей (защита управляющих файлов от исполнителей, заявки по исполнителю, запрет опасных операций по роли, режим strict) действуют только как инструкции. Базовые защиты действуют для всех.
+
+Настройки режима хук читает из `.orchestrator/policy/adapter.yaml` (Qoder, Cursor, Codex) или `claude-code.yaml` (Claude Code).
+
+## 1. Подключение (Claude Code)
 
 `.claude/settings.json`, событие `PreToolUse`:
 
@@ -48,7 +63,7 @@ Kit version: 1.0.0 · Адаптер Claude Code · Файлы: `g1_guard.py` (�
 - **strict:** **Пути только ASCII** на всех инструментах путей → иначе deny (SEC-04).
 - **strict:** **Grep и Glob запрещены** (deny SEC-04), в том числе без `path`. В списках инструментов агентов их тоже нет. Для поиска есть `uok_search.py`.
 - **strict:** **Чтение вне корня** → deny (ISO-02). Чтение `.orchestrator/audit/`, `.orchestrator/claims/`, `.git/` → deny (SEC-04).
-- **Запись в управляющие файлы** → deny (SEC-04). Это `.claude/`, `.git/`, `.orchestrator/`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`, `.gitignore`, `<kit>/validation/`, `<kit>/core/`, `<kit>/adapters/` (`<kit>` = `kit_dir` из `claude-code.yaml`), а на любой глубине — файлы с именами `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`, `settings.json`, `settings.local.json`. Сравнение без учёта регистра.
+- **Запись в управляющие файлы** → deny (SEC-04). Это `.claude/`, `.qoder/`, `.cursor/`, `.codex/`, `.git/`, `.orchestrator/`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `.gitignore`, `<kit>/validation/`, `<kit>/core/`, `<kit>/adapters/` (`<kit>` = `kit_dir` из `claude-code.yaml`), а на любой глубине — файлы с именами `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `settings.json`, `settings.local.json`, `hooks.json`. Сравнение без учёта регистра.
 - **Заявки на запись**: если в `active.json` есть активные заявки, агент может писать только внутри своей. Если журнал заявок повреждён, любая запись агента запрещается.
 - **strict:** **MCP-вызовы** → deny (SEC-04). Эта проверка стоит раньше поиска секретов.
 - **strict:** **Ошибка внутри хука** при любом вызове `uok-*` → deny («failing closed»).
@@ -127,4 +142,4 @@ Fail-open с записью в журнал бывает только у осн�
 python3 -I .orchestrator/hooks/test_g1_guard.py
 ```
 
-114 тестов: полный набор в режиме strict и отдельный набор для standard. Каждый запускает хук отдельным процессом на временном корне с собственной политикой и проверяет решение, код требования и строку журнала. Тесты на Unicode-свёртку выполняются только на томах, которые её поддерживают. Есть тесты с ограничением по времени на вредоносные входы.
+123 теста: полный набор в режиме strict, отдельный набор для standard и тесты форматов Cursor, Codex и Qoder. Одинаково проходят под unittest и pytest. Каждый запускает хук отдельным процессом на временном корне с собственной политикой и проверяет решение, код требования и строку журнала. Тесты на Unicode-свёртку выполняются только на томах, которые её поддерживают. Есть тесты с ограничением по времени на вредоносные входы.

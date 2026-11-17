@@ -5,61 +5,70 @@ researched_at: "2026-11-16"
 capabilities:
   instruction_files:
     status: verified_doc
-    native_mechanism: "AGENTS.md (default; context.fileName configurable), AGENTS.local.md, .qoder/rules/**/*.md with trigger frontmatter; @imports restricted to project boundaries"
-    evidence: "https://docs.qoder.com/cli/memory"
+    native_mechanism: AGENTS.md (default; context.fileName configurable), AGENTS.local.md,
+      .qoder/rules/**/*.md with trigger frontmatter; @imports restricted to project
+      boundaries
+    evidence: https://docs.qoder.com/cli/memory
     fallback: null
   custom_agents:
     status: verified_doc
-    native_mechanism: ".qoder/agents/*.md, ~/.qoder/agents/*.md, --agents JSON; frontmatter name/description/tools/disallowedTools/model/permissionMode/maxTurns/timeoutMins/isolation/background/hooks/mcpServers"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: .qoder/agents/*.md, ~/.qoder/agents/*.md, --agents JSON; frontmatter
+      name/description/tools/disallowedTools/model/permissionMode/maxTurns/timeoutMins/isolation/background/hooks/mcpServers
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   per_agent_model_selection:
     status: verified_doc
-    native_mechanism: "model frontmatter: inherit/auto/lite/efficient/performance or model name"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: 'model frontmatter: inherit/auto/lite/efficient/performance
+      or model name'
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   parallel_dispatch:
     status: verified_doc
-    native_mechanism: "independent subagents dispatched in parallel"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: independent subagents dispatched in parallel
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   background_execution:
     status: verified_doc
-    native_mechanism: "background: true (feature must be enabled); completion notification"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: 'background: true (feature must be enabled); completion notification'
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   worktree_isolation:
     status: verified_doc
-    native_mechanism: "isolation: worktree frontmatter"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: 'isolation: worktree frontmatter'
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   blocking_hooks:
     status: verified_doc
-    native_mechanism: "CLI + Desktop hooks; per-agent scoped hooks (PreToolUse, Stop observed); full event list unverified"
-    evidence: "https://docs.qoder.com/cli/hooks ; /cli/hooks-reference ; /cli/subagent"
+    native_mechanism: PreToolUse in .qoder/settings.json; Claude-compatible stdin
+      (tool_name, tool_input, agent_type); hookSpecificOutput.permissionDecision allow/deny/ask;
+      exit 2 blocks
+    evidence: https://docs.qoder.com/cli/hooks (2026-11-17)
     fallback: null
   permission_modes:
     status: verified_doc
-    native_mechanism: "permissionMode: default/acceptEdits/bypassPermissions/dontAsk/auto/plan; global permission config"
-    evidence: "https://docs.qoder.com/cli/subagent ; /cli/permissions"
+    native_mechanism: 'permissionMode: default/acceptEdits/bypassPermissions/dontAsk/auto/plan;
+      global permission config'
+    evidence: https://docs.qoder.com/cli/subagent ; /cli/permissions
     fallback: null
   mcp:
     status: verified_doc
-    native_mechanism: "global MCP config + per-agent mcpServers"
-    evidence: "https://docs.qoder.com/cli/mcp-servers ; /cli/subagent"
+    native_mechanism: global MCP config + per-agent mcpServers
+    evidence: https://docs.qoder.com/cli/mcp-servers ; /cli/subagent
     fallback: null
   headless_invocation:
     status: verified_doc
-    native_mechanism: "qoder -p \"...\"; --agent <name>; cli/run-in-scripts, cli/loop, Agent SDK"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: qoder -p "..."; --agent <name>; cli/run-in-scripts, cli/loop,
+      Agent SDK
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   context_isolation:
     status: verified_doc
-    native_mechanism: "per-subagent context, system prompt, tool registry, transcript"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: per-subagent context, system prompt, tool registry, transcript
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: null
   nesting:
     status: unknown
-    native_mechanism: "subagent may call subagent if Agent tool available; Agent(name) restricts callees; depth limit not documented"
-    evidence: "https://docs.qoder.com/cli/subagent"
+    native_mechanism: subagent may call subagent if Agent tool available; Agent(name)
+      restricts callees; depth limit not documented
+    evidence: https://docs.qoder.com/cli/subagent
     fallback: flatten_hierarchy

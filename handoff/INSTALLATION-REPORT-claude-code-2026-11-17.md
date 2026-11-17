@@ -191,3 +191,22 @@ It also found a real defect: under pytest, `load_tests` was ignored and 27 stric
 A side effect observed during the rework: with the hook script moved, every tool call in the open session was blocked until the file was restored (missing hook ⇒ exit 2). This is documented in the adapter README §9 and the hook README §10.
 
 Maturity: claude-code `integration_tested`; the other adapters remain `specification_complete` (no installer, not run live).
+
+## Other environments: installers for Qoder, Cursor, Codex (2026-11-17)
+
+- **Shared core.** `adapters/shared/` holds `uok_install.py` (backups, idempotent writes, policy, marked instruction section, verification) and the G1 hook.
+- **One hook for all hosts.** The hook takes `--format claude|qoder|cursor|codex`:
+  - Cursor: `before*` events with `{"permission": …}` output and an explicit allow.
+  - Codex: `apply_patch` bodies are parsed for paths and added text; `ask` is turned into `deny`.
+  - Qoder: same schema as Claude Code.
+  - The hook finds the project root from its own location, so no machine paths are needed.
+  - The host config dirs (`.qoder/`, `.cursor/`, `.codex/`) and `AGENTS.md` are write-protected for workers.
+- **Hook schemas** were checked against official docs on 2026-11-17 (`verified_doc`): docs.qoder.com/cli/hooks, cursor.com/docs/agent/hooks, learn.chatgpt.com/docs/hooks and learn.chatgpt.com/docs/agent-configuration/subagents.
+- **Installer tests** (`verified_local`): each host was tested on a sample project with user config (a user hook in each; Qoder a user agent with a kit name; Cursor a user rule). For each host: dry run, install, idempotent rerun (no changes), user config preserved (Qoder name clash reported, not overwritten), valid JSON/TOML, hook test suite OK, and a smoke event denied. The registered hook command was run through `sh -c` from a project subdirectory for each host and gave the expected decisions.
+- **Hook tests:** 123 (strict suite, standard suite, host-format suite), passing under unittest and pytest.
+- **Not done:**
+  - Live runs inside Qoder, Cursor or Codex: their agent CLIs are not present on this machine (Qoder.app and Cursor.app are installed, Codex is not).
+  - Cursor `preToolUse` input fields are `unverified`.
+  - Prompts for the live checks: `handoff/LIVE-CHECKS.md`. Maturity for qoder/cursor/codex: `implementation_available`.
+- **Human review of the G1 hook:** not done. Guide and record format: `handoff/HUMAN-REVIEW-G1.md`.
+- **uok-* agents after the session restart:** `uok-research-analyst` was dispatched successfully in the new session (`verified_live`).

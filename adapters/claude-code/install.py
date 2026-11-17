@@ -36,7 +36,7 @@ except ImportError:
 
 ADAPTER = os.path.dirname(os.path.realpath(__file__))
 KIT = os.path.dirname(os.path.dirname(ADAPTER))
-PAYLOAD = os.path.join(ADAPTER, "payload")
+PAYLOAD = os.path.join(os.path.dirname(ADAPTER), "shared")
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 AGENT_MARK = "(Universal Orchestrator Kit role)"

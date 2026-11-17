@@ -43,8 +43,17 @@ it performs directive steps 8-12 for you (additive, idempotent, with backups):
 
 | Environment | Installer | Status |
 |---|---|---|
-| Claude Code | `python3 adapters/claude-code/install.py --dry-run`, then without `--dry-run` | integration_tested (2026-11-17) |
-| Qoder, Cursor, Codex, other | none yet: follow the directive with your adapter README | specification_complete |
+| Claude Code | `python3 adapters/claude-code/install.py` | integration_tested (live, 2026-11-17) |
+| Qoder | `python3 adapters/qoder/install.py` | implementation_available (installer tested; live checks pending) |
+| Cursor | `python3 adapters/cursor/install.py` | implementation_available (installer tested; live checks pending) |
+| Codex | `python3 adapters/codex/install.py` | implementation_available (installer tested; live checks pending) |
+| other | none: follow the directive with `adapters/universal/README.md` | specification_complete |
+
+Run each installer with `--dry-run` first. All of them share `adapters/shared/` (installer core + G1 hook).
+
+Live checks for Qoder, Cursor and Codex: paste the prompt from
+[handoff/LIVE-CHECKS.md](handoff/LIVE-CHECKS.md) into that application's agent chat.
+Human review of the G1 hook: [handoff/HUMAN-REVIEW-G1.md](handoff/HUMAN-REVIEW-G1.md).
 
 You still do steps 1-7 (identify, inspect, read, audit) and step 13 (report),
 and you pass the model aliases you actually probed (`--models`).

@@ -16,7 +16,22 @@ Every decision is logged to .orchestrator/audit/g1.log.
 """
 import fnmatch, functools, json, os, re, sys, time
 
-ROOT = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+def _project_root():
+    """Project root, independent of the host application: an explicit env var if the host sets one,
+    else the directory two levels above this file when installed as <root>/.orchestrator/hooks/,
+    else the working directory."""
+    for var in ("UOK_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "QODER_PROJECT_DIR", "CURSOR_PROJECT_DIR"):
+        if os.environ.get(var):
+            return os.environ[var]
+    here = os.path.dirname(os.path.realpath(__file__))
+    if here.endswith(os.sep + os.path.join(".orchestrator", "hooks")):
+        return os.path.dirname(os.path.dirname(here))
+    return os.getcwd()
+
+
+# Host event/decision format: claude (default) | qoder | cursor | codex  (`--format X` on the command line).
+FORMAT = sys.argv[sys.argv.index("--format") + 1] if "--format" in sys.argv[:-1] else "claude"
+ROOT = _project_root()
 REAL_ROOT = os.path.realpath(ROOT)  # canonicalised below, after canonical() is defined
 AUDIT = os.path.join(ROOT, ".orchestrator", "audit", "g1.log")
 DENIED_GLOBS = [".env", ".env.*", "*credentials*", "*secret*", "*.pem", "*.key", "*.p12", "*.pfx",
@@ -127,14 +142,15 @@ CONTENT_KEYS = ("content", "new_string", "new_source", "edits")
 # protected (hooks, policy, claims, audit log; N6), and so is every directory holding an
 # allowlisted script, so a writer cannot plant code that the restricted shell will run (NB4).
 def _cfg(key, default):
-    """Scalar `key: value` from .orchestrator/policy/claude-code.yaml (no PyYAML dependency)."""
-    try:
-        for ln in open(os.path.join(ROOT, ".orchestrator", "policy", "claude-code.yaml")):
-            m = re.match(r"\s*" + re.escape(key) + r":\s*\"?([^\"#\n]+?)\"?\s*(#.*)?$", ln)
-            if m:
-                return m.group(1).strip()
-    except OSError:
-        pass
+    """Scalar `key: value` from .orchestrator/policy/adapter.yaml, or claude-code.yaml (no PyYAML dependency)."""
+    for name in ("adapter.yaml", "claude-code.yaml"):
+        try:
+            for ln in open(os.path.join(ROOT, ".orchestrator", "policy", name)):
+                m = re.match(r"\s*" + re.escape(key) + r":\s*\"?([^\"#\n]+?)\"?\s*(#.*)?$", ln)
+                if m:
+                    return m.group(1).strip()
+        except OSError:
+            continue
     return default
 
 
@@ -144,11 +160,13 @@ def _cfg(key, default):
 STRICT = _cfg("enforcement", "standard").lower() == "strict"
 # Where the kit lives relative to the project root (set by the installer); its code is write-protected.
 KIT_DIR = _cfg("kit_dir", "UNIVERSAL-ORCHESTRATOR-KIT").strip("/").lower()
-PROTECTED = (".claude/", ".git/", ".orchestrator/", "claude.md", "claude.local.md", ".mcp.json", ".gitignore") \
+PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".git/", ".orchestrator/", "claude.md", "claude.local.md",
+             "agents.md", "agents.local.md", ".mcp.json", ".gitignore") \
     + (() if os.path.isabs(KIT_DIR) or KIT_DIR.startswith("..") else
        (KIT_DIR + "/validation/", KIT_DIR + "/core/", KIT_DIR + "/adapters/"))
 # File names protected at any depth (nested CLAUDE.md files are loaded as instructions; round 6, item 3).
-PROTECTED_NAMES = ("claude.md", "claude.local.md", ".mcp.json", "settings.json", "settings.local.json")
+PROTECTED_NAMES = ("claude.md", "claude.local.md", "agents.md", "agents.local.md", ".mcp.json", "settings.json",
+                   "settings.local.json", "hooks.json")
 NO_READ_FOR_UOK = (".orchestrator/audit/", ".orchestrator/claims/", ".git/")
 # Roles whose AGENT-CAPABILITIES permissions say sensitive_ops: approval_required.
 APPROVAL_ROLES = {"uok-senior-engineer", "uok-release-integration"}
@@ -177,12 +195,74 @@ def log(msg):
 
 
 def decide(decision, reason):
+    """Emit a deny/ask decision in the host's format and exit."""
+    if decision == "ask" and (FORMAT == "codex" or CTX.get("event") == "beforeReadFile"):
+        # Codex PreToolUse cannot ask ("parsed but not supported"); Cursor beforeReadFile is allow/deny.
+        # Fail safe: deny, and tell the agent a human must approve and run it.
+        decision, reason = "deny", f"requires human approval; a hook cannot ask here, so the human must run it: {reason}"
     log(f"{decision}: [{CTX['agent']} {CTX['tool']}] {reason}")
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": decision,
-        "permissionDecisionReason": f"[UOK G1] {reason}"}}))
+    msg = f"[UOK G1] {reason}"
+    if FORMAT == "cursor":
+        print(json.dumps({"permission": decision, "user_message": msg, "agent_message": msg}))
+    else:   # claude, qoder, codex share the PreToolUse hookSpecificOutput shape
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": msg}}))
     sys.exit(0)
+
+
+def finish_allow():
+    """Cursor permission hooks need an explicit allow; other hosts take silence as 'no objection'."""
+    if FORMAT == "cursor":
+        print(json.dumps({"permission": "allow"}))
+
+
+def _patch_files(patch, cwd):
+    """Paths and added text from a Codex apply_patch body (*** Add/Update/Delete File:, *** Move to:)."""
+    paths, added = [], []
+    for ln in patch.splitlines():
+        m = re.match(r"\*\*\* (?:Add|Update|Delete) File: (.+)$|\*\*\* Move to: (.+)$", ln)
+        if m:
+            p = (m.group(1) or m.group(2)).strip()
+            paths.append(p if os.path.isabs(p) else os.path.join(cwd, p))
+        elif ln.startswith("+") and not ln.startswith("+++"):
+            added.append(ln[1:])
+    return paths, "\n".join(added)
+
+
+def normalize(ev):
+    """Map a host event to (tool, tool_input, agent) in the Claude Code vocabulary used below."""
+    if FORMAT == "cursor":
+        name = ev.get("hook_event_name") or ""
+        if not name:   # infer from the documented fields
+            name = ("beforeMCPExecution" if "mcp_server_name" in ev else
+                    "beforeShellExecution" if "command" in ev and "tool_name" not in ev else
+                    "beforeReadFile" if "file_path" in ev and "tool_name" not in ev else "preToolUse")
+        CTX["event"] = name
+        if name == "beforeShellExecution":
+            return "Bash", {"command": ev.get("command", "")}, ""
+        if name == "beforeMCPExecution":
+            ti = ev.get("tool_input", {})
+            if isinstance(ti, str):
+                try:
+                    ti = json.loads(ti)
+                except ValueError:
+                    ti = {"raw": ti}
+            return f"mcp__{ev.get('mcp_server_name', 'server')}__{ev.get('tool_name', 'tool')}", ti, ""
+        if name == "beforeReadFile":
+            return "Read", {"file_path": ev.get("file_path", "")}, ""
+        tool, ti = ev.get("tool_name", ""), ev.get("tool_input", {}) or {}
+        if isinstance(ti, dict) and "target_file" in ti and "file_path" not in ti:
+            ti = dict(ti, file_path=ti["target_file"])
+        return tool, ti, ""
+    tool, ti = ev.get("tool_name", ""), ev.get("tool_input", {}) or {}
+    if FORMAT == "codex":
+        if tool == "apply_patch" and isinstance(ti, dict):
+            paths, added = _patch_files(str(ti.get("command", "")), str(ev.get("cwd") or ROOT))
+            return "Write", {"_paths": paths, "content": added}, ""
+        return tool, ti, ""   # Codex hook events carry no subagent identity
+    return tool, ti, ev.get("agent_type") or ""
 
 
 def string_leaves(obj):
@@ -389,8 +469,7 @@ def main():
     if not isinstance(ev, dict):
         log("fail-open: event is not a JSON object")
         return
-    tool, inp = ev.get("tool_name", ""), ev.get("tool_input", {}) or {}
-    agent = ev.get("agent_type") or ""
+    tool, inp, agent = normalize(ev)
     CTX.update(agent=str(agent) or "main", tool=str(tool))
     if not isinstance(tool, str) or not isinstance(agent, str):
         raise TypeError("tool_name/agent_type must be strings")
@@ -399,7 +478,7 @@ def main():
             decide("deny", f"tool_input is not an object for a security-relevant tool; failing closed")
         log(f"fail-open: tool_input is not an object ({tool})")
         return
-    paths = [inp[k] for k in PATH_KEYS if inp.get(k)]
+    paths = [inp[k] for k in PATH_KEYS if inp.get(k)] + list(inp.get("_paths", []) if isinstance(inp.get("_paths"), list) else [])
     for p in paths:   # bound all path work before it starts (round 5, P1); fail closed
         if isinstance(p, str) and (len(p) > MAX_PATH_LEN or p.count("/") > MAX_PATH_PARTS
                                    or any(ord(c) < 32 or ord(c) == 127 for c in p)):
@@ -454,9 +533,11 @@ def security_relevant():
 if __name__ == "__main__":
     try:
         main()
+        finish_allow()
     except SystemExit:
         raise
     except Exception as e:
         if security_relevant():
             decide("deny", f"hook error {type(e).__name__} on a security-relevant tool; failing closed")
         log(f"fail-open: hook error {type(e).__name__}: {str(e)[:200]!r}")
+        finish_allow()

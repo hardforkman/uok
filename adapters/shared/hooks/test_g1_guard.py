@@ -673,6 +673,7 @@ class G1GuardTest(unittest.TestCase):
     # ---- security review round 6 residuals ----
     def test_instruction_and_mcp_files_protected_at_any_depth(self):
         for rel_path in (".mcp.json", "src/CLAUDE.md", "docs/sub/claude.local.md", "pkg/.claude/settings.json",
+                         "AGENTS.md", "src/AGENTS.md", ".qoder/rules/uok.md", ".cursor/hooks.json", ".codex/agents/x.toml",
                          ".gitignore", "UNIVERSAL-ORCHESTRATOR-KIT/core/routing-policy.yaml"):
             self.assertDecision(self.run_event_full("Write", {"file_path": self.p(rel_path), "content": "x"},
                                 "uok-implementation-engineer"), "deny", "SEC-04")
@@ -744,11 +745,96 @@ class StandardModeTest(G1GuardTest):
         self.assertEqual(self.run_event("Bash", {"command": "grep -rn foo ."}, "uok-test-engineer"), "allow")
 
 
+class HostFormatTest(G1GuardTest):
+    """--format cursor | codex | qoder: event normalisation and decision output per host (standard mode)."""
+    MODE = "standard"
+
+    def run_fmt(self, fmt, event):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=self.root)
+        p = subprocess.run([sys.executable, "-I", HOOK, "--format", fmt], input=json.dumps(event),
+                           capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        return json.loads(p.stdout) if p.stdout.strip() else None
+
+    # Cursor: separate before* events, {"permission": ...} output, explicit allow required
+    def test_fmt_cursor_shell(self):
+        out = self.run_fmt("cursor", {"hook_event_name": "beforeShellExecution", "command": "git push --force", "cwd": self.root})
+        self.assertEqual(out["permission"], "ask")
+        self.assertIn("SEC-07", out["user_message"])
+        self.assertEqual(self.run_fmt("cursor", {"hook_event_name": "beforeShellExecution", "command": "ls"}),
+                         {"permission": "allow"})
+
+    def test_fmt_cursor_read_secret_denied_and_ask_becomes_deny(self):
+        out = self.run_fmt("cursor", {"hook_event_name": "beforeReadFile", "file_path": self.p(".env"), "content": ""})
+        self.assertEqual(out["permission"], "deny")
+        self.assertEqual(self.run_fmt("cursor", {"hook_event_name": "beforeReadFile", "file_path": self.p("a.py")}),
+                         {"permission": "allow"})
+
+    def test_fmt_cursor_mcp_secret_in_json_string(self):
+        ev = {"hook_event_name": "beforeMCPExecution", "mcp_server_name": "srv", "tool_name": "send",
+              "tool_input": json.dumps({"api" + "_key": "abcdefghij0123456789xyz"})}
+        self.assertEqual(self.run_fmt("cursor", ev)["permission"], "deny")
+
+    def test_fmt_cursor_pretooluse_write_outside_root(self):
+        ev = {"hook_event_name": "preToolUse", "tool_name": "Write",
+              "tool_input": {"target_file": "/tmp/x.txt", "content": "x"}}
+        self.assertEqual(self.run_fmt("cursor", ev)["permission"], "deny")
+
+    def test_fmt_cursor_inferred_event_and_bad_input_still_answers(self):
+        self.assertEqual(self.run_fmt("cursor", {"command": "ls"}), {"permission": "allow"})
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=self.root)
+        p = subprocess.run([sys.executable, "-I", HOOK, "--format", "cursor"], input="not json",
+                           capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(json.loads(p.stdout), {"permission": "allow"})
+
+    # Codex: apply_patch bodies, no ask support
+    def _patch(self, *lines):
+        return {"tool_name": "apply_patch", "cwd": self.root,
+                "tool_input": {"command": "*** Begin Patch\n" + "\n".join(lines) + "\n*** End Patch"}}
+
+    def test_fmt_codex_patch_checks(self):
+        deny = lambda ev: self.assertEqual(self.run_fmt("codex", ev)["hookSpecificOutput"]["permissionDecision"], "deny")
+        deny(self._patch("*** Add File: .env", "+X=1"))
+        deny(self._patch("*** Update File: ../outside.py", "+x = 1"))
+        deny(self._patch("*** Add File: src/a.py", "+" + self.secret()))
+        deny(self._patch("*** Update File: src/a.py", "*** Move to: /tmp/stolen.py", "+x"))
+        self.assertIsNone(self.run_fmt("codex", self._patch("*** Add File: src/a.py", "+print(1)")))
+
+    def test_fmt_codex_ask_becomes_deny(self):
+        out = self.run_fmt("codex", {"tool_name": "Bash", "tool_input": {"command": "git push --force"}})
+        h = out["hookSpecificOutput"]
+        self.assertEqual(h["permissionDecision"], "deny")
+        self.assertIn("human", h["permissionDecisionReason"])
+
+    # Qoder: Claude-compatible schema incl. agent_type
+    def test_fmt_qoder_worker_rules(self):
+        ev = {"tool_name": "Write", "agent_type": "uok-implementation-engineer",
+              "tool_input": {"file_path": self.p(".qoder/settings.json"), "content": "{}"}}
+        # .qoder/ is a guard-control dir for qoder installs; settings.json is protected at any depth anyway
+        self.assertEqual(self.run_fmt("qoder", ev)["hookSpecificOutput"]["permissionDecision"], "deny")
+        ev = {"tool_name": "Bash", "agent_type": "uok-release-integration", "tool_input": {"command": "rm -rf build"}}
+        self.assertEqual(self.run_fmt("qoder", ev)["hookSpecificOutput"]["permissionDecision"], "ask")
+
+    def test_fmt_root_from_install_location(self):
+        hooks = os.path.join(self.root, ".orchestrator", "hooks")
+        os.makedirs(hooks, exist_ok=True)
+        shutil.copy(HOOK, hooks)
+        env = {k: v for k, v in os.environ.items() if not k.endswith("_PROJECT_DIR")}
+        p = subprocess.run([sys.executable, "-I", os.path.join(hooks, "g1_guard.py"), "--format", "codex"],
+                           input=json.dumps(self._patch("*** Add File: /tmp/x.py", "+1")),
+                           capture_output=True, text=True, env=env, timeout=30, cwd=tempfile.gettempdir())
+        self.assertIn("ISO-02", p.stdout)
+        self.assertIn("deny", open(os.path.join(self.root, ".orchestrator", "audit", "g1.log")).read())
+
+
 # Standard mode runs only the tests written for it. Inherited strict-mode tests are removed from the
 # class itself (not via load_tests), so unittest and pytest collect exactly the same 114 tests.
 for _name in [n for n in dir(G1GuardTest) if n.startswith("test_")]:
     if not _name.startswith("test_std_"):
         setattr(StandardModeTest, _name, None)
+    if not _name.startswith("test_fmt_"):
+        setattr(HostFormatTest, _name, None)
 
 
 if __name__ == "__main__":
