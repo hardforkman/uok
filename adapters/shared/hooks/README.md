@@ -17,7 +17,7 @@ Kit version: 1.0.0 · Используется адаптерами Claude Code,
 |---|---|---|---|
 | Claude Code | `claude` (по умолчанию) | `.claude/settings.json`, PreToolUse | эталон; `agent_type` отличает исполнителей `uok-*` |
 | Qoder | `qoder` | `.qoder/settings.json`, PreToolUse | та же схема, что у Claude Code, включая `agent_type` и `ask` |
-| Cursor | `cursor` | `.cursor/hooks.json`: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | ответ `{"permission": …}`, хук всегда отвечает явно (в том числе `allow`); на `beforeReadFile` `ask` становится `deny`; нет идентичности агента |
+| Cursor | `cursor` | `.cursor/hooks.json`: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | ответ `{"permission": …}`, хук всегда отвечает явно (в том числе `allow`); `ask` становится `deny` с причиной «человек должен выполнить сам»: документация обещает запрос человеку, но живьём (Cursor 3.27.22, 2026-11-17) команда исполнилась без запроса — fail-closed; `beforeReadFile` срабатывает только для существующих файлов; нет идентичности агента |
 | Codex | `codex` | `.codex/hooks.json`, PreToolUse | правки приходят как `apply_patch`: хук извлекает пути и добавленный текст; `ask` не поддерживается, поэтому становится `deny` с причиной «человек должен выполнить сам»; нет идентичности агента |
 
 Корень проекта хук берёт из `UOK_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `QODER_PROJECT_DIR` / `CURSOR_PROJECT_DIR`, иначе по своему расположению (`<корень>/.orchestrator/hooks/`), иначе из рабочего каталога. Команда в конфигурации Qoder, Cursor и Codex ищет хук через `git rev-parse --show-toplevel`, поэтому работает из любой подпапки.

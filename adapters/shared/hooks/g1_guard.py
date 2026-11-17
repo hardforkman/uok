@@ -197,8 +197,9 @@ def log(msg):
 
 def decide(decision, reason):
     """Emit a deny/ask decision in the host's format and exit."""
-    if decision == "ask" and (FORMAT == "codex" or CTX.get("event") == "beforeReadFile"):
-        # Codex PreToolUse cannot ask ("parsed but not supported"); Cursor beforeReadFile is allow/deny.
+    if decision == "ask" and FORMAT in ("codex", "cursor"):
+        # Codex PreToolUse cannot ask ("parsed but not supported"). Cursor documents
+        # ask, but live 3.27.22 executed the command with no human prompt (2026-11-17).
         # Fail safe: deny, and tell the agent a human must approve and run it.
         decision, reason = "deny", f"requires human approval; a hook cannot ask here, so the human must run it: {reason}"
     log(f"{decision}: [{CTX['agent']} {CTX['tool']}] {reason}")

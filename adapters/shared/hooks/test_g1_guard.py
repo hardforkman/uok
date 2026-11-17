@@ -760,9 +760,12 @@ class HostFormatTest(G1GuardTest):
 
     # Cursor: separate before* events, {"permission": ...} output, explicit allow required
     def test_fmt_cursor_shell(self):
+        # Live 2026-11-17 (Cursor 3.27.22): host executed the command despite a
+        # documented {"permission": "ask"} response, no human prompt. Fail closed.
         out = self.run_fmt("cursor", {"hook_event_name": "beforeShellExecution", "command": "git push --force", "cwd": self.root})
-        self.assertEqual(out["permission"], "ask")
+        self.assertEqual(out["permission"], "deny")
         self.assertIn("SEC-07", out["user_message"])
+        self.assertIn("human", out["agent_message"])
         self.assertEqual(self.run_fmt("cursor", {"hook_event_name": "beforeShellExecution", "command": "ls"}),
                          {"permission": "allow"})
 
