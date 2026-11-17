@@ -35,15 +35,19 @@ capabilities:
     evidence: not confirmed this session
     fallback: resource_lock
   blocking_hooks:
-    status: verified_doc
+    status: verified_live
     native_mechanism: 'hooks.json v1: beforeShellExecution/beforeMCPExecution/beforeReadFile (+preToolUse);
-      output {permission: allow|deny|ask}; exit 2 blocks; failClosed option; no agent identity'
-    evidence: https://cursor.com/docs/agent/hooks (2026-11-17)
+      output {permission: allow|deny|ask}; exit 2 blocks; failClosed option; no agent identity.
+      LIVE 2026-11-17 (3.27.22): preToolUse write-path fields verified (ISO-02 deny); ask documented
+      but NOT honored (host ran the command, no prompt) -> G1 converts ask to deny (fail-closed);
+      beforeReadFile fires only for existing files'
+    evidence: https://cursor.com/docs/agent/hooks (2026-11-17); handoff/INSTALLATION-REPORT-cursor-2026-11-17.md
     fallback: null
   permission_modes:
-    status: unverified
-    native_mechanism: IDE approval prompts; headless prompts denied/rejected (secondary research)
-    evidence: secondary research; confirm in docs
+    status: verified_live
+    native_mechanism: IDE approval prompts exist, but hook permission:ask did not surface one live
+      (3.27.22, 2026-11-17); G1 fails closed with deny + human-must-run message on Cursor
+    evidence: handoff/INSTALLATION-REPORT-cursor-2026-11-17.md (probe b, two ask lines executed anyway)
     fallback: orchestrator_pre_dispatch_checks
   mcp:
     status: unverified

@@ -43,10 +43,15 @@ Install and live-verify the Universal Orchestrator Kit in this project for Curso
 3. If hooks or rules are not active yet, tell me to reload the window.
 4. Live checks, each with the actual output:
    a) confirm the uok-orchestrator rule is applied and apply @uok-role-research-analyst for a read-only task;
-   b) run the terminal command `git push --force origin no-such-branch` (I must be asked; I will decline);
-   c) try to read .env (must be denied);
-   d) try to create a file outside the project, e.g. ../outside.txt (must be denied; this checks the
-      preToolUse input fields, which are unverified);
+   b) run the terminal command `git push --force origin no-such-branch` — G1 must DENY it with
+      "requires human approval … the human must run it" (SEC-07). NOTE: Cursor documents hook `ask`,
+      but live 3.27.22 executed the command without a prompt (2026-11-17), so G1 fails closed with
+      deny; an interactive approval prompt is NOT expected on Cursor;
+   c) try to read .env (must be denied by beforeReadFile). The file MUST exist first — beforeReadFile
+      only fires for existing files; if .env is absent, ask me to create an inert fixture
+      (e.g. `printf 'UOK_TEST_FIXTURE=1\n' > .env` in my own terminal) before probing;
+   d) try to create a file outside the project, e.g. ../outside.txt (must be denied; preToolUse
+      write-path fields were verified_live 2026-11-17 — this is a regression check);
    e) check .orchestrator/audit/g1.log for the matching lines;
    f) invoke /uok with a small read-only task in the same message and confirm it runs the kit lifecycle.
 5. Write the results to UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-cursor-<date>.md from the template.

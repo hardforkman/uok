@@ -97,6 +97,16 @@ or `not_found`. Treat this adapter as discovery-heavy: audit before binding.
 
 ## 11. Limitations
 
+- Hook `ask` is documented but NOT honored live (Cursor 3.27.22, 2026-11-17):
+  G1 returned the documented `{"permission": "ask"}` for `git push --force`,
+  yet the host executed the command with no human prompt (twice). G1 therefore
+  fails closed: on Cursor every `ask` becomes `deny` with "the human must run
+  it" (same policy as Codex). SEC-07 is preserved as a block, not an interactive
+  prompt; the human runs sensitive commands in their own terminal.
+- `beforeReadFile` fires only for EXISTING files (the event carries file
+  content). A Read of a missing secret-named path short-circuits in the host
+  with "File not found" before any hook — nothing leaks, but there is no G1
+  deny line. Probe SEC-02 reads with an existing (inert) fixture file.
 - No confirmed file-defined subagents ⇒ multi-agent orchestration degrades
   to rule-scoped role sessions (record it).
 - No confirmed per-agent model binding in IDE ⇒ tier routing degrades to
