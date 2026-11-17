@@ -1,0 +1,119 @@
+# Universal Routing Policy — machine-readable normative form.
+# Prose explanation and requirement IDs (RT-01…RT-07): core/ROUTING-POLICY.md
+# Consumed by validation/reference_router.py. Policy changes MUST be versioned
+# (policy_version) and MUST NOT weaken approval requirements (SEC-10, QA-04).
+schema_version: 1
+policy_version: 1.0.0
+
+tiers:
+  TIER-1:
+    name: fast_economy
+    purpose: Simple, low-risk, high-volume tasks. Optimize latency and cost.
+  TIER-2:
+    name: standard
+    purpose: Routine engineering, research, and testing work.
+  TIER-3:
+    name: advanced_reasoning
+    purpose: Complex engineering, architecture, security-sensitive analysis.
+  TIER-4:
+    name: specialized
+    purpose: Domain-specialized execution requiring declared expertise.
+  TIER-5:
+    name: independent_review
+    purpose: Independent validation by an actor that did not implement the work.
+
+# Base tier per task category (categories defined in core/TASK-CLASSIFICATION.md).
+category_base_tier:
+  CAT-01: TIER-1   # simple
+  CAT-02: TIER-2   # standard_engineering
+  CAT-03: TIER-3   # complex_engineering
+  CAT-04: TIER-3   # architecture_strategy
+  CAT-05: TIER-2   # research_investigation
+  CAT-06: TIER-2   # testing_qa
+  CAT-07: TIER-3   # security_sensitive
+  CAT-08: TIER-4   # specialized_domain
+
+# Default agent role per category; task.required_role overrides this.
+category_default_role:
+  CAT-01: implementation_engineer
+  CAT-02: implementation_engineer
+  CAT-03: senior_engineer
+  CAT-04: architect
+  CAT-05: research_analyst
+  CAT-06: test_engineer
+  CAT-07: security_reviewer
+  CAT-08: senior_engineer
+
+# Additive tier modifiers (sum of deltas applied to the base tier index).
+modifiers:
+  complexity: { low: 0, medium: 0, high: 1 }
+  reasoning: { basic: 0, standard: 0, advanced: 1 }
+  failure_impact: { low: 0, medium: 0, high: 1 }
+
+# Escalation from modifiers never pushes a non-specialized task past TIER-3.
+# TIER-4 is reached only via CAT-08 or explicit task.requested_tier.
+# TIER-5 is reserved for review tasks (task.is_review: true).
+modifier_tier_cap: TIER-3
+
+# Hard floors: computed tier may never fall below these.
+tier_floors:
+  CAT-04: TIER-3
+  CAT-07: TIER-3
+  CAT-08: TIER-4
+
+# Model selection within the chosen tier.
+selection:
+  # Candidate filter: model.tier_affinity contains the tier, availability is
+  # not "unavailable", and declared capabilities satisfy task requirements.
+  exclude_availability: [unavailable]
+  allow_unverified_models: true      # flagged as unverified in the decision record
+  allow_unknown_capabilities: true   # flagged; never treated as confirmed
+  # Deterministic ranking (first key wins):
+  #   1. reliability descending (unknown counts as 0.5)
+  #   2. known input cost ascending (unknown sorts last)
+  #   3. latency class ascending fast<standard<slow (unknown sorts last)
+  #   4. model id ascending (stable tie-break)
+  unknown_reliability_neutral: 0.5
+  rank_by: [reliability_desc, cost_asc, latency_asc, id_asc]
+
+# Fallback chain (RT-07). Applied in order; every step is logged.
+fallback:
+  max_retries: 2
+  retry_backoff_seconds: [5, 30]
+  on_model_unavailable: [same_tier_alternative, escalate_tier, human_escalation]
+  on_execution_failure: [retry_with_feedback, same_tier_alternative, escalate_tier, human_escalation]
+  on_validation_failure: [retry_with_feedback, escalate_tier, human_escalation]
+  # Tier escalation walks TIER-1→2→3→4 only. TIER-5 is never an escalation target.
+  escalation_path: [TIER-1, TIER-2, TIER-3, TIER-4]
+
+# Independent review (QA-01).
+review:
+  tier: TIER-5
+  required_when:
+    - failure_impact_high
+    - security_sensitive
+    - project_require_independent_review
+  independence:
+    # Reviewer must differ from implementer in model_id OR agent_instance_id.
+    exclude_implementer_model: true
+    exclude_implementer_instance: true
+    prefer_different_family: true
+
+# Human approval gates (SEC-07, SEC-09). Non-removable by policy updates.
+approval:
+  sensitive_operations:
+    - production_deploy
+    - financial_transaction
+    - irreversible_data_change
+    - destructive_infra_change
+    - credential_access_change
+    - unauthorized_external_publication
+  # A task touching any of the above MUST reach APPROVED_IF_REQUIRED with a
+  # recorded human approval before EXECUTING.
+  block_execution_without_approval: true
+
+# Parallelism safety (LC-03, LC-04) — enforced by the lifecycle kernel.
+parallelism:
+  require_dependencies_satisfied: true
+  require_resource_claims_disjoint_for_writes: true
+  write_conflict_strategies: [resource_lock, worktree_isolation, merge_coordination, native_isolation]

@@ -1,0 +1,93 @@
+# =============================================================================
+# PROJECT CONFIG TEMPLATE — Universal Orchestrator Kit 1.0.0
+# Requirements: ISO-01…ISO-06, SEC-01…SEC-10, CFG-01
+#
+# Copy to your project config location (adapter README §12 specifies it;
+# universal default: .orchestrator/policy/project.yaml) and fill in.
+# Conservative defaults: strict isolation, all approval gates ON,
+# independent review ON for high-impact work, economy preference ON.
+# NEVER put secrets here — reference env vars / secret-store keys only.
+# =============================================================================
+schema_version: 1
+
+# --- Identity (ISO-01, ISO-06) -------------------------------------------------
+project_id: "REPLACE-ME"            # unique, stable; tasks reference exactly one
+name: "Replace with project name"
+description: "One paragraph: what this project is and its boundaries."
+
+# --- Isolation (ISO-02…ISO-05) -------------------------------------------------
+isolation: strict                    # strict | relaxed — relaxed requires written justification below
+isolation_justification: null        # required if isolation != strict
+cross_project:
+  default: deny                      # deny | allow — keep deny
+  grants: []                         # cross_project_grant objects (HANDOFF-CONTRACT §1); explicit, scoped, expiring
+secret_redaction:
+  enabled: true                      # MUST stay true (SEC-03); disabling is a spec violation
+  method: "pattern-scan+allowlist-review"   # adapter may strengthen
+
+# --- Instructions & constraints (ISO-06) ---------------------------------------
+instructions:
+  files:                             # project instruction files the adapter loads
+    - "AGENTS.md"                    # adjust per environment (CLAUDE.md, .cursor/rules, ...)
+  kit_binding: ".orchestrator/policy/"      # where installed kit policy lives
+constraints:                         # architecture/technical constraints passed in envelopes
+  - "Replace: language/runtime versions"
+  - "Replace: forbidden dependencies or patterns"
+  - "Replace: style/test conventions"
+relevant_artifacts:                  # default artifact scope for envelopes (minimality, ISO-03)
+  - "src/"
+  - "tests/"
+
+# --- Permissions (SEC-01, SEC-04) ----------------------------------------------
+permissions:
+  default_role_grants:               # intersected with role permissions (AGENT-CAPABILITIES.yaml)
+    filesystem: write                # project source scope only
+    shell: restricted
+    network: none
+  shell_allowlist:                   # commands workers may run (restricted mode)
+    - "git status"
+    - "git diff"
+    - "git worktree"
+    # add build/test commands explicitly, e.g. "npm test", "pytest"
+  denied_paths:                      # never readable/writable by workers
+    - ".env*"
+    - "**/*credentials*"
+    - "**/*secret*"
+
+# --- Human approval gates (SEC-07, SEC-09, SEC-10) ------------------------------
+approval:
+  required_operations:               # non-removable list; may only be EXTENDED
+    - production_deploy
+    - financial_transaction
+    - irreversible_data_change
+    - destructive_infra_change
+    - credential_access_change
+    - unauthorized_external_publication
+  auto_approve: false                # MUST stay false; true is a spec violation
+  approver_contact: "REPLACE-ME"     # how the orchestrator reaches the human
+
+# --- Quality (QA-01…QA-04) ------------------------------------------------------
+quality:
+  require_independent_review: true   # G3 for high failure_impact / CAT-07 always; this extends to all high quality_bar tasks
+  review_independence: "model_or_instance"   # never weaker; prefer different family when available
+  evidence_required: true            # no success claims without artifacts (G2)
+  regression_checks: true
+
+# --- Budget & performance (RT-01) ------------------------------------------------
+budget:
+  max_cost_per_task: null            # null = no ceiling; set a number (USD) to enable
+  prefer_economy: true               # ranking hint only; never lowers tier floors
+  latency_preference: balanced       # fast | balanced | quality
+
+# --- Execution (LC-03, LC-04) -----------------------------------------------------
+execution:
+  parallelism: safe                  # safe (claims-checked) | sequential — never "unrestricted"
+  write_conflict_strategy: resource_lock   # resource_lock | worktree_isolation | merge_coordination | native_isolation
+  default_timeout_seconds: 1800
+  ledger_dir: ".orchestrator/"       # git-ignore unless deliberately committed
+
+# --- Observability (SEC-06, QA-02) --------------------------------------------------
+audit:
+  enabled: true                      # MUST stay true
+  log: ".orchestrator/audit/events.yaml"
+  metrics: ".orchestrator/audit/metrics.yaml"

@@ -1,0 +1,248 @@
+# Behavior-test scenario fixtures — TS-01…TS-12
+# Kit version: 1.0.0 · Spec version: 1.0.0
+# Each scenario maps to validation/COMPATIBILITY-TESTS.md and is executed by
+# validation/behavior_tests.py against the reference kernel with test_only
+# mock models (no network, no real endpoints).
+schema_version: 1
+scenarios:
+  - id: TS-01
+    name: simple task routed to economical model
+    task:
+      task_id: T-demo-001
+      project_id: demo
+      title: Rename a variable in one file
+      statement: Rename `foo` to `bar` in src/util.py and update references.
+      category: CAT-01
+      complexity: low
+      reasoning: basic
+      failure_impact: low
+      created_at: "2026-11-16T00:00:00Z"
+      resource_claims: [{path: "src/util.py", mode: write}]
+    expect: { tier: TIER-1, model_id: mock-fast, decision: route }
+
+  - id: TS-02
+    name: complex task escalated to stronger model
+    task:
+      task_id: T-demo-002
+      project_id: demo
+      title: Refactor cross-module caching
+      statement: Redesign the caching layer across three modules with concurrency safety.
+      category: CAT-02
+      complexity: high
+      reasoning: advanced
+      failure_impact: high
+      created_at: "2026-11-16T00:00:00Z"
+    expect: { tier: TIER-3, model_id: mock-advanced, decision: route }
+
+  - id: TS-03
+    name: task requiring a specialized agent
+    task:
+      task_id: T-demo-003
+      project_id: demo
+      title: Financial reconciliation logic
+      statement: Implement double-entry reconciliation for the ledger module.
+      category: CAT-08
+      required_specialties: [finance]
+      required_role: senior_engineer
+      required_capabilities: [software_engineering]
+      created_at: "2026-11-16T00:00:00Z"
+    expect: { tier: TIER-4, model_id: mock-specialist, decision: route }
+
+  - id: TS-04
+    name: independent tasks executed in parallel
+    tasks:
+      - task_id: T-demo-004a
+        project_id: demo
+        title: Write module A tests
+        statement: Add unit tests for module A.
+        category: CAT-06
+        created_at: "2026-11-16T00:00:00Z"
+        resource_claims: [{path: "tests/test_a.py", mode: write}]
+      - task_id: T-demo-004b
+        project_id: demo
+        title: Write module B tests
+        statement: Add unit tests for module B.
+        category: CAT-06
+        created_at: "2026-11-16T00:00:00Z"
+        resource_claims: [{path: "tests/test_b.py", mode: write}]
+    expect: { parallel_allowed: true }
+
+  - id: TS-05
+    name: dependent tasks executed sequentially
+    tasks:
+      - task_id: T-demo-005a
+        project_id: demo
+        title: Implement endpoint
+        statement: Implement the /items endpoint.
+        category: CAT-02
+        created_at: "2026-11-16T00:00:00Z"
+      - task_id: T-demo-005b
+        project_id: demo
+        title: Document endpoint
+        statement: Document /items after implementation lands.
+        category: CAT-01
+        depends_on: [T-demo-005a]
+        created_at: "2026-11-16T00:00:00Z"
+    expect: { parallel_allowed: false, premature_dependency_resolution_blocked: true }
+
+  - id: TS-06
+    name: model becoming unavailable
+    task:
+      task_id: T-demo-006
+      project_id: demo
+      title: Trivial fix with primary model down
+      statement: Fix a typo in README.
+      category: CAT-01
+      complexity: low
+      created_at: "2026-11-16T00:00:00Z"
+    registry_mutations:
+      - { id: mock-fast, availability: unavailable }
+    expect: { tier: TIER-1, model_id: mock-fast-backup, decision: route }
+
+  - id: TS-07
+    name: failed task triggering fallback
+    task:
+      task_id: T-demo-007
+      project_id: demo
+      title: Task whose tier has no available models
+      statement: Simple task while all TIER-1 models are down.
+      category: CAT-01
+      complexity: low
+      created_at: "2026-11-16T00:00:00Z"
+    registry_mutations:
+      - { id: mock-fast, availability: unavailable }
+      - { id: mock-fast-backup, availability: unavailable }
+    expect:
+      tier: TIER-2
+      model_id: mock-standard
+      decision: route
+      flag: tier_escalated
+      retry_steps: [retry_with_feedback, retry_with_feedback, same_tier_alternative]
+
+  - id: TS-08
+    name: reviewer rejecting an implementation
+    task:
+      task_id: T-demo-008
+      project_id: demo
+      title: Review implementation of T-demo-002
+      statement: Independently review the caching refactor.
+      category: CAT-06
+      is_review: true
+      reviews_task_id: T-demo-002
+      created_at: "2026-11-16T00:00:00Z"
+    implementer: { model_id: mock-advanced, agent_instance_id: senior_engineer-1, family: mock-advanced }
+    expect:
+      tier: TIER-5
+      model_id: mock-reviewer
+      independent: true
+      rejection_enters_retry: true
+
+  - id: TS-09
+    name: sensitive task requiring approval
+    task:
+      task_id: T-demo-009
+      project_id: demo
+      title: Deploy release to production
+      statement: Deploy v1.2 to production servers.
+      category: CAT-02
+      sensitive_operations: [production_deploy]
+      created_at: "2026-11-16T00:00:00Z"
+    expect: { requires_approval: true, execution_without_approval_blocked: true, execution_with_approval_allowed: true }
+
+  - id: TS-10
+    name: project-isolation violation prevented
+    envelopes:
+      wrong_project:
+        envelope_id: E-1
+        project_id: other
+        task_id: T-demo-010
+        from_actor: orchestrator
+        to_actor: worker
+        instructions_ref: AGENTS.md
+        task_statement: do work
+        artifacts: ["projects/other/src/x.py"]
+        permissions: {}
+        redaction: { passed: true, method: scan, at: "2026-11-16" }
+        forbidden_content_ack: true
+      ungranted_cross_project:
+        envelope_id: E-2
+        project_id: demo
+        task_id: T-demo-010
+        from_actor: orchestrator
+        to_actor: worker
+        instructions_ref: AGENTS.md
+        task_statement: do work
+        artifacts: ["projects/secret-project/src/keys.py"]
+        permissions: {}
+        redaction: { passed: true, method: scan, at: "2026-11-16" }
+        forbidden_content_ack: true
+      secret_leak:
+        envelope_id: E-3
+        project_id: demo
+        task_id: T-demo-010
+        from_actor: orchestrator
+        to_actor: worker
+        instructions_ref: AGENTS.md
+        task_statement: "use api_key=fixture secret marker"
+        artifacts: []
+        permissions: {}
+        redaction: { passed: true, method: scan, at: "2026-11-16" }
+        forbidden_content_ack: true
+      granted_cross_project:
+        envelope_id: E-4
+        project_id: demo
+        task_id: T-demo-010
+        from_actor: orchestrator
+        to_actor: worker
+        instructions_ref: AGENTS.md
+        task_statement: do work
+        artifacts: ["projects/shared-lib/src/api.py"]
+        permissions: {}
+        cross_project_grants:
+          - grant_id: G-1
+            grantor: human
+            source_project: shared-lib
+            scope: ["projects/shared-lib/src/api.py"]
+            reason: "demo depends on shared-lib public API"
+            granted_at: "2026-11-16"
+        redaction: { passed: true, method: scan, at: "2026-11-16" }
+        forbidden_content_ack: true
+    expect:
+      wrong_project: rejected
+      ungranted_cross_project: rejected
+      secret_leak: rejected
+      granted_cross_project: accepted
+
+  - id: TS-11
+    name: conflicting parallel file modifications prevented
+    tasks:
+      - task_id: T-demo-011a
+        project_id: demo
+        title: Writer A
+        statement: Modify shared config.
+        category: CAT-02
+        created_at: "2026-11-16T00:00:00Z"
+        resource_claims: [{path: "src/config.py", mode: write}]
+      - task_id: T-demo-011b
+        project_id: demo
+        title: Writer B
+        statement: Modify the same shared config.
+        category: CAT-02
+        created_at: "2026-11-16T00:00:00Z"
+        resource_claims: [{path: "src/config.py", mode: write}]
+    expect: { parallel_allowed: false, second_acquire_blocked: true }
+
+  - id: TS-12
+    name: environment lacking native multi-agent support
+    task:
+      task_id: T-demo-012
+      project_id: demo
+      title: Work in a minimal environment
+      statement: Implement a small feature where no native subagents exist.
+      category: CAT-02
+      created_at: "2026-11-16T00:00:00Z"
+    profile: universal
+    expect:
+      environment_in: [headless_cli, manual]
+      flags_include: [degraded_multi_agent, degraded_parallelism, degraded_model_routing]
+      sequential_enforced: true

@@ -1,0 +1,65 @@
+schema: adapter_profile
+schema_version: 1
+adapter: cursor
+researched_at: "2026-11-16"
+capabilities:
+  instruction_files:
+    status: verified_doc
+    native_mechanism: ".cursor/rules/*.mdc (description/globs/alwaysApply); AGENTS.md with nested dirs; User Rules"
+    evidence: "https://cursor.com/docs/context/rules"
+    fallback: null
+  custom_agents:
+    status: not_found
+    native_mechanism: null
+    evidence: "not found in agent overview/rules/hooks pages reviewed 2026-11-16"
+    fallback: rule_scoped_role_sessions
+  per_agent_model_selection:
+    status: not_found
+    native_mechanism: "IDE: per-task user choice; CLI: --model flag"
+    evidence: "https://cursor.com/docs/agent/overview ; https://cursor.com/docs/cli/overview"
+    fallback: session_level_model_switch
+  parallel_dispatch:
+    status: not_found
+    native_mechanism: null
+    evidence: "not found in reviewed pages; IDE background agents unverified"
+    fallback: sequential_execution
+  background_execution:
+    status: unverified
+    native_mechanism: "IDE background agents (product feature; docs unconfirmed)"
+    evidence: "secondary research"
+    fallback: sequential_execution
+  worktree_isolation:
+    status: unverified
+    native_mechanism: null
+    evidence: "not confirmed this session"
+    fallback: resource_lock
+  blocking_hooks:
+    status: verified_doc
+    native_mechanism: "hooks.json project/user; block via exit code 2 or deny"
+    evidence: "https://cursor.com/docs/agent/hooks"
+    fallback: null
+  permission_modes:
+    status: unverified
+    native_mechanism: "IDE approval prompts; headless prompts denied/rejected (secondary research)"
+    evidence: "secondary research; confirm in docs"
+    fallback: orchestrator_pre_dispatch_checks
+  mcp:
+    status: unverified
+    native_mechanism: "MCP supported in IDE; config path unconfirmed"
+    evidence: "secondary research"
+    fallback: null
+  headless_invocation:
+    status: verified_doc
+    native_mechanism: "agent -p \"prompt\"; --model"
+    evidence: "https://cursor.com/docs/cli/overview"
+    fallback: null
+  context_isolation:
+    status: unverified
+    native_mechanism: null
+    evidence: "no native subagent isolation confirmed"
+    fallback: envelope_discipline
+  nesting:
+    status: unknown
+    native_mechanism: null
+    evidence: "not applicable until multi-agent support confirmed"
+    fallback: flatten_hierarchy

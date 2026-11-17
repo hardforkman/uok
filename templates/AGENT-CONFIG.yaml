@@ -1,0 +1,135 @@
+# =============================================================================
+# AGENT CONFIG TEMPLATE — Universal Orchestrator Kit 1.0.0
+# Requirements: ARCH-02, SEC-01/04, QA-01, CFG-01
+#
+# Enables/configures capability roles (core/AGENT-CAPABILITIES.yaml) in YOUR
+# environment. Copy to .orchestrator/policy/agents.yaml (or adapter location).
+# Roles are capability definitions, not model bindings: one model may serve
+# several roles; several instances may serve one role.
+# Conservative defaults: reviewers read-only, no bypass permissions,
+# independence enforced, native mechanisms preferred.
+# =============================================================================
+schema_version: 1
+
+capabilities_ref: "core/AGENT-CAPABILITIES.yaml"
+
+# --- Role enablement -------------------------------------------------------------
+# Disable roles your environment cannot support; the router re-routes or
+# escalates (never silently drops the responsibility).
+enabled_roles:
+  - orchestrator
+  - architect
+  - senior_engineer
+  - implementation_engineer
+  - research_analyst
+  - debugging_specialist
+  - test_engineer
+  - security_reviewer
+  - code_reviewer
+  - documentation_specialist
+  - release_integration
+
+# --- Per-role settings --------------------------------------------------------------
+# tier: default routing tier hint (router may escalate per policy)
+# model_selector: environment-specific binding (frontmatter value, profile
+#   name, API model id). null = inherit tier binding from MODEL-CONFIG.
+# tools: effective allowlist = this ∩ role permissions ∩ project grants.
+# permission_mode: native mode name where supported; NEVER a bypass mode for
+#   kit-managed agents (SEC-01/10).
+role_settings:
+  orchestrator:
+    tier: TIER-3
+    model_selector: null
+    tools: [Read, Grep, Glob, TaskLedger]     # orchestrator coordinates; workers implement
+    permission_mode: default
+    max_turns: null
+    timeout_seconds: 3600
+  implementation_engineer:
+    tier: TIER-2
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit, Shell]
+    permission_mode: default
+    max_turns: 60
+    timeout_seconds: 1800
+  senior_engineer:
+    tier: TIER-3
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit, Shell]
+    permission_mode: default
+    max_turns: 80
+    timeout_seconds: 3600
+  architect:
+    tier: TIER-3
+    model_selector: null
+    tools: [Read, Grep, Glob]                 # design work is read-only
+    permission_mode: default
+    max_turns: 40
+    timeout_seconds: 3600
+  research_analyst:
+    tier: TIER-2
+    model_selector: null
+    tools: [Read, Grep, Glob, WebSearch, WebFetch]
+    permission_mode: default
+    max_turns: 40
+    timeout_seconds: 1800
+  debugging_specialist:
+    tier: TIER-3
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit, Shell]
+    permission_mode: default
+    max_turns: 80
+    timeout_seconds: 3600
+  test_engineer:
+    tier: TIER-2
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit, Shell]
+    permission_mode: default
+    max_turns: 60
+    timeout_seconds: 1800
+  security_reviewer:
+    tier: TIER-3
+    model_selector: null
+    tools: [Read, Grep, Glob]                 # reviewers never write (QA-01 independence)
+    permission_mode: default
+    max_turns: 40
+    timeout_seconds: 1800
+  code_reviewer:
+    tier: TIER-5
+    model_selector: null                      # bind a DIFFERENT family than implementers when possible
+    tools: [Read, Grep, Glob, Shell]          # shell restricted to test/check commands
+    permission_mode: default
+    max_turns: 40
+    timeout_seconds: 1800
+  documentation_specialist:
+    tier: TIER-1
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit]
+    permission_mode: default
+    max_turns: 40
+    timeout_seconds: 900
+  release_integration:
+    tier: TIER-2
+    model_selector: null
+    tools: [Read, Grep, Glob, Write, Edit, Shell]
+    permission_mode: default                  # sensitive ops still hit SEC-07 gates
+    max_turns: 60
+    timeout_seconds: 1800
+
+# --- Independence (QA-01) --------------------------------------------------------------
+independence:
+  reviewer_roles: [code_reviewer, security_reviewer]
+  exclude_implementer_instance: true          # non-removable
+  exclude_implementer_model: true             # non-removable
+  prefer_different_family: true
+  degradation: human_review                   # when no second instance/model exists: human_review | escalate (never self_review)
+
+# --- Parallelism (LC-03/04) ----------------------------------------------------------------
+parallelism:
+  max_concurrent_workers: 3                   # conservative; raise only with verified isolation
+  isolation: resource_lock                    # resource_lock | worktree | native (adapter-verified)
+  require_disjoint_write_claims: true         # non-removable
+
+# --- Registration honesty (NS-07) ------------------------------------------------------------
+registration:
+  declare_only_verified_capabilities: true    # agent_register capabilities = actually available subset
+  default_verification: unverified            # promoted only with recorded probe evidence

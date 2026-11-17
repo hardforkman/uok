@@ -1,0 +1,183 @@
+# Universal Agent Capability Registry
+# Kit version: 1.0.0 · Spec version: 1.0.0 · Requirements: ARCH-02, RT-01, SEC-01, QA-01
+#
+# Roles are capability definitions, NOT model bindings (directive §5):
+# - One model MAY execute multiple roles.
+# - Multiple models MAY participate in one role (e.g. implementer + reviewer
+#   instances of code_reviewer).
+# The orchestrator selects agents by task requirements vs declared capabilities.
+#
+# permission vocabulary:
+#   filesystem: none | read | write
+#   shell:      none | restricted | allowed   (restricted = allowlisted commands)
+#   network:    none | restricted | allowed
+#   sensitive_ops: never | approval_required  (SEC-07 gates always apply)
+schema_version: 1
+capabilities_version: 1.0.0
+
+roles:
+  - id: orchestrator
+    name: Orchestrator / Lead Agent
+    responsibilities:
+      - Analyze and decompose incoming work
+      - Classify tasks and resolve dependencies
+      - Route tasks (model, agent, tool, environment planes)
+      - Track lifecycle, aggregate results, accept or escalate
+      - Enforce isolation, approval gates, and audit logging
+    capabilities: [task_analysis, decomposition, routing, dependency_management,
+                   context_management, escalation, audit]
+    default_tier: TIER-3
+    tier_affinity: [TIER-2, TIER-3]
+    permissions: { filesystem: read, shell: restricted, network: none, sensitive_ops: approval_required }
+    expected_outputs: [task_graph, routing_decisions, execution_ledger, acceptance_report]
+    validation: Must not implement high-impact tasks it also accepts; acceptance
+      of high-impact work requires an independent review result (QA-01).
+    independence: null
+
+  - id: architect
+    name: Architect
+    responsibilities:
+      - System and module design, trade-off analysis
+      - Architecture decisions records and migration strategy
+    capabilities: [system_design, tradeoff_analysis, api_design, data_modeling,
+                   architecture, deep_reasoning]
+    default_tier: TIER-3
+    tier_affinity: [TIER-3, TIER-4]
+    permissions: { filesystem: read, shell: none, network: none, sensitive_ops: never }
+    expected_outputs: [design_document, decision_record, interface_contracts]
+    validation: Designs must be reviewed against project constraints before
+      implementation tasks are spawned.
+    independence: null
+
+  - id: senior_engineer
+    name: Senior Engineer
+    responsibilities:
+      - Complex implementation and refactoring
+      - Cross-module changes, performance work
+      - Mentoring implementation tasks via review feedback
+    capabilities: [software_engineering, refactoring, debugging, code_review,
+                   performance_optimization]
+    default_tier: TIER-3
+    tier_affinity: [TIER-2, TIER-3]
+    permissions: { filesystem: write, shell: restricted, network: none, sensitive_ops: approval_required }
+    expected_outputs: [code_changes, change_summary, test_evidence]
+    validation: Changes must pass project quality gates (G2) and, for
+      high-impact work, independent review (G3).
+    independence: null
+
+  - id: implementation_engineer
+    name: Implementation Engineer
+    responsibilities:
+      - Well-specified implementation tasks
+      - Localized fixes, feature increments, wiring
+    capabilities: [software_engineering, code_editing, test_writing]
+    default_tier: TIER-2
+    tier_affinity: [TIER-1, TIER-2]
+    permissions: { filesystem: write, shell: restricted, network: none, sensitive_ops: never }
+    expected_outputs: [code_changes, change_summary, test_evidence]
+    validation: G2 gates; escalate to senior_engineer when complexity exceeds
+      the task classification.
+    independence: null
+
+  - id: research_analyst
+    name: Research Analyst
+    responsibilities:
+      - Codebase and documentation investigation
+      - External research with source attribution
+      - Option analysis with evidence
+    capabilities: [codebase_search, web_research, summarization, option_analysis]
+    default_tier: TIER-2
+    tier_affinity: [TIER-1, TIER-2, TIER-3]
+    permissions: { filesystem: read, shell: restricted, network: restricted, sensitive_ops: never }
+    expected_outputs: [research_report, source_list, confidence_tags]
+    validation: Every factual claim carries a source and a verification status;
+      unverified claims must be labeled (NS-07).
+    independence: null
+
+  - id: debugging_specialist
+    name: Debugging Specialist
+    responsibilities:
+      - Root-cause analysis of failures
+      - Minimal reproducible cases, fix verification
+    capabilities: [debugging, log_analysis, root_cause_analysis, test_writing]
+    default_tier: TIER-3
+    tier_affinity: [TIER-2, TIER-3]
+    permissions: { filesystem: write, shell: restricted, network: none, sensitive_ops: never }
+    expected_outputs: [root_cause_report, fix, regression_test]
+    validation: Fix must include a regression test that fails before and passes
+      after the change.
+    independence: null
+
+  - id: test_engineer
+    name: Test Engineer
+    responsibilities:
+      - Test design and execution
+      - Coverage and edge-case analysis
+      - Validation of acceptance criteria
+    capabilities: [test_design, test_execution, coverage_analysis, validation]
+    default_tier: TIER-2
+    tier_affinity: [TIER-1, TIER-2, TIER-3]
+    permissions: { filesystem: write, shell: restricted, network: none, sensitive_ops: never }
+    expected_outputs: [test_suite, execution_results, coverage_report]
+    validation: Results must include actual command output; claimed passes
+      without evidence are rejected (NS-07).
+    independence: null
+
+  - id: security_reviewer
+    name: Security Reviewer
+    responsibilities:
+      - Threat modeling and secure-code review
+      - Secret-exposure and injection checks
+      - Approval-gate classification of sensitive operations
+    capabilities: [security, threat_modeling, code_review, secret_detection,
+                   injection_analysis]
+    default_tier: TIER-3
+    tier_affinity: [TIER-3, TIER-4]
+    permissions: { filesystem: read, shell: restricted, network: none, sensitive_ops: never }
+    expected_outputs: [security_findings, severity_ratings, remediation_requirements]
+    validation: Findings must reference concrete code locations and a severity
+      scale; blocking findings prevent acceptance.
+    independence: Must not be the implementer of the reviewed change (QA-01).
+
+  - id: code_reviewer
+    name: Code Reviewer
+    responsibilities:
+      - Independent correctness and maintainability review
+      - Acceptance-criteria verification
+    capabilities: [code_review, validation, standards_checking]
+    default_tier: TIER-5
+    tier_affinity: [TIER-2, TIER-3, TIER-5]
+    permissions: { filesystem: read, shell: restricted, network: none, sensitive_ops: never }
+    expected_outputs: [review_verdict, findings, required_changes]
+    validation: Verdict is approve / reject with itemized findings; rejection
+      triggers the on_validation_failure fallback chain.
+    independence: Must not be the implementer of the reviewed change (QA-01).
+
+  - id: documentation_specialist
+    name: Documentation Specialist
+    responsibilities:
+      - User and developer documentation
+      - Change logs, handoff notes, reports
+    capabilities: [technical_writing, summarization, documentation]
+    default_tier: TIER-1
+    tier_affinity: [TIER-1, TIER-2]
+    permissions: { filesystem: write, shell: none, network: none, sensitive_ops: never }
+    expected_outputs: [documentation, changelog, handoff_notes]
+    validation: Docs must match actual behavior; no invented features (NS-07).
+    independence: null
+
+  - id: release_integration
+    name: Release and Integration Specialist
+    responsibilities:
+      - Merge coordination for parallel work
+      - Release preparation, deployment runbooks
+      - Rollback planning (SEC-08)
+    capabilities: [merge_coordination, release_management, rollback_planning,
+                   ci_integration]
+    default_tier: TIER-2
+    tier_affinity: [TIER-2, TIER-3]
+    permissions: { filesystem: write, shell: restricted, network: restricted, sensitive_ops: approval_required }
+    expected_outputs: [merge_plan, release_checklist, rollback_plan]
+    validation: Production deployment requires recorded human approval (SEC-07);
+      every release must have a tested rollback path.
+    independence: null

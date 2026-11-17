@@ -1,0 +1,63 @@
+# =============================================================================
+# MODEL CONFIG TEMPLATE — Universal Orchestrator Kit 1.0.0
+# Requirements: RT-04, RT-05, CFG-01, SEC-02
+#
+# Binds abstract routing tiers to models ACTUALLY available in your
+# environment. Copy to .orchestrator/policy/models.yaml (or adapter location).
+#
+# HONESTY RULES:
+# - Probe your environment's model list first; bind only what exists.
+# - Anything unconfirmed stays unverified/unknown — never invent ids/pricing.
+# - Credentials: env-var NAMES only (values live in your secret store).
+# - test_only registry entries must never be bound for real work.
+# =============================================================================
+schema_version: 1
+
+# Base registry shipped with the kit (illustrative entries are unverified).
+registry_ref: "core/MODEL-REGISTRY.yaml"
+
+# --- Tier bindings (RT-03, RT-04) ----------------------------------------------
+# model_id: registry id, OR environment selector string the adapter understands
+# (e.g. Qoder 'performance', Claude Code alias, Codex profile name).
+# null = unbound: router will select from registry tier_affinity candidates.
+tier_bindings:
+  TIER-1: { model_id: null, selector: null }   # e.g. selector: "efficient" (Qoder) / "haiku" (Claude Code)
+  TIER-2: { model_id: null, selector: null }
+  TIER-3: { model_id: null, selector: null }
+  TIER-4: { model_id: null, selector: null }
+  TIER-5: { model_id: null, selector: null }   # prefer a DIFFERENT family than TIER-2/3 implementers
+
+# --- Availability probing (RT-05, NS-07) ----------------------------------------
+availability_probe:
+  enabled: true
+  method: "list-models-or-trivial-call"   # adapter-specific; record evidence
+  on_failure: mark_unavailable            # mark_unavailable | keep_unverified
+  evidence_dir: ".orchestrator/audit/model_probes/"
+
+# --- Registry overrides ----------------------------------------------------------
+# Local, versioned corrections to registry entries (e.g. after probing).
+# Each override MUST carry evidence and verified_at; costs may be filled from
+# your provider's actual pricing page — never from memory.
+overrides: []
+# Example shape (do not uncomment without real evidence):
+# - id: claude-sonnet-class
+#   availability: verified_available
+#   capabilities: { context_window_tokens: 200000 }
+#   cost: { input_per_mtok: 3.0, output_per_mtok: 15.0 }
+#   verified_at: "2026-11-16"
+#   evidence: ".orchestrator/audit/model_probes/sonnet.json"
+
+# --- Selection policy hooks (must not weaken core policy) -------------------------
+selection:
+  allow_unverified_models: true      # allowed but flagged in every routing decision
+  allow_test_only_models: false      # MUST stay false outside validation tests
+  exclude_models: []                 # ids banned in this project (e.g. data-residency rules)
+  max_input_cost_per_mtok: null      # optional ceiling; null = none
+
+# --- Provider credentials (SEC-02) ---------------------------------------------------
+# Names only. The kit never reads, stores, or transfers values.
+providers:
+  anthropic: { auth_env: ANTHROPIC_API_KEY }
+  openai:    { auth_env: OPENAI_API_KEY }
+  google:    { auth_env: GEMINI_API_KEY }
+  local:     { base_url_env: LOCAL_MODEL_BASE_URL, auth_env: LOCAL_MODEL_API_KEY }

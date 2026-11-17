@@ -1,0 +1,65 @@
+schema: adapter_profile
+schema_version: 1
+adapter: claude-code
+researched_at: "2026-11-16"
+capabilities:
+  instruction_files:
+    status: verified_doc
+    native_mechanism: "CLAUDE.md / CLAUDE.local.md / ~/.claude/CLAUDE.md; @imports <=4 hops"
+    evidence: "https://code.claude.com/docs/en/memory"
+    fallback: null
+  custom_agents:
+    status: verified_doc
+    native_mechanism: ".claude/agents/*.md, ~/.claude/agents/*.md; frontmatter name/description/tools/model"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: null
+  per_agent_model_selection:
+    status: verified_doc
+    native_mechanism: "model frontmatter: aliases (sonnet/opus/haiku/fable) or full IDs"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: null
+  parallel_dispatch:
+    status: verified_doc
+    native_mechanism: "background subagents run concurrently"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: null
+  background_execution:
+    status: verified_doc
+    native_mechanism: "background subagents"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: null
+  worktree_isolation:
+    status: unverified
+    native_mechanism: null
+    evidence: "not confirmed this session; check docs/worktrees"
+    fallback: resource_lock
+  blocking_hooks:
+    status: verified_doc
+    native_mechanism: "PreToolUse/PostToolUse/SessionStart in settings.json; exit 2 or permissionDecision deny"
+    evidence: "https://code.claude.com/docs/en/hooks"
+    fallback: null
+  permission_modes:
+    status: unverified
+    native_mechanism: "permissions.deny observed; full rule syntax unconfirmed"
+    evidence: "https://code.claude.com/docs/en/memory (partial)"
+    fallback: orchestrator_pre_dispatch_checks
+  mcp:
+    status: unverified
+    native_mechanism: ".mcp.json (project)"
+    evidence: "not confirmed this session"
+    fallback: null
+  headless_invocation:
+    status: unverified
+    native_mechanism: "claude -p (print mode); runs hooks/.mcp.json without trust dialog"
+    evidence: "secondary research; confirm code.claude.com/docs/en/headless"
+    fallback: null
+  context_isolation:
+    status: verified_doc
+    native_mechanism: "separate context window per subagent"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: null
+  nesting:
+    status: verified_doc
+    native_mechanism: "up to 3 layers by default"
+    evidence: "https://code.claude.com/docs/en/sub-agents"
+    fallback: flatten_hierarchy

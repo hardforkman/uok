@@ -1,0 +1,302 @@
+# Universal Model Registry
+# Kit version: 1.0.0 · Spec version: 1.0.0 · Requirements: RT-04, RT-05, ARCH-02
+#
+# HONESTY RULES (normative):
+# - availability: unknown | unverified | verified_available | unavailable
+# - Any capability or cost that has not been confirmed MUST be "unknown".
+# - Entries below marked `example: true` are ILLUSTRATIVE registry entries.
+#   Their existence/capabilities/pricing are NOT confirmed by this kit; verify
+#   against the provider in YOUR environment before use (see MODEL-CONFIG.yaml).
+# - `test_only: true` entries are deterministic fixtures for the reference
+#   kernel's behavior tests. They are not real endpoints. Never route real
+#   work to them.
+# - Credentials are referenced by environment-variable NAME only (SEC-02).
+#   Never put keys, tokens, or passwords in this file.
+schema_version: 1
+registry_version: 1.0.0
+
+providers:
+  anthropic:
+    kind: hosted_api
+    auth_env: ANTHROPIC_API_KEY        # name of env var; value never stored here
+    status: unverified
+  openai:
+    kind: hosted_api
+    auth_env: OPENAI_API_KEY
+    status: unverified
+  google:
+    kind: hosted_api
+    auth_env: GEMINI_API_KEY
+    status: unverified
+  local:
+    kind: openai_compatible_endpoint
+    base_url_env: LOCAL_MODEL_BASE_URL
+    auth_env: LOCAL_MODEL_API_KEY      # may be unused by local servers
+    status: unverified
+  mock:
+    kind: test_fixture
+    status: verified_local             # exists only inside validation tests
+
+models:
+  # ------------------------------------------------------------------
+  # Illustrative entries (example: true). All facts unverified/unknown.
+  # Replace ids/aliases with what your account actually exposes.
+  # ------------------------------------------------------------------
+  - id: claude-haiku-class
+    provider: anthropic
+    family: claude-haiku
+    example: true
+    aliases: [haiku]
+    tier_affinity: [TIER-1]
+    capabilities:
+      reasoning: standard
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: []
+    availability: unverified
+    reliability: unknown
+    latency_class: fast
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative fast/economical family entry. Confirm exact model id,
+      context window, tool support, and pricing with the provider.
+
+  - id: claude-sonnet-class
+    provider: anthropic
+    family: claude-sonnet
+    example: true
+    aliases: [sonnet]
+    tier_affinity: [TIER-2, TIER-3]
+    capabilities:
+      reasoning: advanced
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: [software_engineering]
+    availability: unverified
+    reliability: unknown
+    latency_class: standard
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative general engineering family entry.
+
+  - id: claude-opus-class
+    provider: anthropic
+    family: claude-opus
+    example: true
+    aliases: [opus]
+    tier_affinity: [TIER-3, TIER-5]
+    capabilities:
+      reasoning: advanced
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: [architecture, deep_reasoning]
+    availability: unverified
+    reliability: unknown
+    latency_class: slow
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative advanced-reasoning family entry.
+
+  - id: gpt-mini-class
+    provider: openai
+    family: gpt-mini
+    example: true
+    aliases: []
+    tier_affinity: [TIER-1, TIER-2]
+    capabilities:
+      reasoning: standard
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: []
+    availability: unverified
+    reliability: unknown
+    latency_class: fast
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative economical OpenAI-family entry.
+
+  - id: gpt-flagship-class
+    provider: openai
+    family: gpt-flagship
+    example: true
+    aliases: []
+    tier_affinity: [TIER-2, TIER-3, TIER-5]
+    capabilities:
+      reasoning: advanced
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: [software_engineering, deep_reasoning]
+    availability: unverified
+    reliability: unknown
+    latency_class: standard
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative flagship OpenAI-family entry.
+
+  - id: gemini-flash-class
+    provider: google
+    family: gemini-flash
+    example: true
+    aliases: []
+    tier_affinity: [TIER-1, TIER-2]
+    capabilities:
+      reasoning: standard
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: [long_context]
+    availability: unverified
+    reliability: unknown
+    latency_class: fast
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative fast Google-family entry.
+
+  - id: gemini-pro-class
+    provider: google
+    family: gemini-pro
+    example: true
+    aliases: []
+    tier_affinity: [TIER-3, TIER-5]
+    capabilities:
+      reasoning: advanced
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: [long_context, deep_reasoning]
+    availability: unverified
+    reliability: unknown
+    latency_class: standard
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Illustrative advanced Google-family entry.
+
+  - id: local-openai-compatible
+    provider: local
+    family: local
+    example: true
+    aliases: [local]
+    tier_affinity: [TIER-1, TIER-2]
+    capabilities:
+      reasoning: unknown
+      tool_use: unknown
+      context_window_tokens: unknown
+      specialties: []
+    availability: unverified
+    reliability: unknown
+    latency_class: unknown
+    cost: { input_per_mtok: unknown, output_per_mtok: unknown, currency: USD }
+    verified_at: null
+    notes: Placeholder for a self-hosted OpenAI-compatible endpoint. Declare
+      real capabilities only after probing the endpoint.
+
+  # ------------------------------------------------------------------
+  # Deterministic test fixtures (test_only: true). Used exclusively by
+  # validation/behavior_tests.py. Known values here are fixture facts,
+  # not claims about real products.
+  # ------------------------------------------------------------------
+  - id: mock-fast
+    provider: mock
+    family: mock-fast
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-1]
+    capabilities:
+      reasoning: basic
+      tool_use: true
+      context_window_tokens: 32000
+      specialties: []
+    availability: verified_available
+    reliability: 0.90
+    latency_class: fast
+    cost: { input_per_mtok: 0.10, output_per_mtok: 0.30, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Economical tier.
+
+  - id: mock-fast-backup
+    provider: mock
+    family: mock-fast
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-1]
+    capabilities:
+      reasoning: basic
+      tool_use: true
+      context_window_tokens: 32000
+      specialties: []
+    availability: verified_available
+    reliability: 0.80
+    latency_class: fast
+    cost: { input_per_mtok: 0.12, output_per_mtok: 0.35, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Same-tier fallback candidate.
+
+  - id: mock-standard
+    provider: mock
+    family: mock-standard
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-2]
+    capabilities:
+      reasoning: standard
+      tool_use: true
+      context_window_tokens: 128000
+      specialties: [software_engineering]
+    availability: verified_available
+    reliability: 0.92
+    latency_class: standard
+    cost: { input_per_mtok: 1.00, output_per_mtok: 3.00, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Standard tier.
+
+  - id: mock-advanced
+    provider: mock
+    family: mock-advanced
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-3]
+    capabilities:
+      reasoning: advanced
+      tool_use: true
+      context_window_tokens: 200000
+      specialties: [software_engineering, architecture, deep_reasoning]
+    availability: verified_available
+    reliability: 0.95
+    latency_class: slow
+    cost: { input_per_mtok: 5.00, output_per_mtok: 15.00, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Advanced reasoning tier.
+
+  - id: mock-specialist
+    provider: mock
+    family: mock-specialist
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-4]
+    capabilities:
+      reasoning: advanced
+      tool_use: true
+      context_window_tokens: 200000
+      specialties: [security, finance, ml_ops]
+    availability: verified_available
+    reliability: 0.93
+    latency_class: standard
+    cost: { input_per_mtok: 6.00, output_per_mtok: 18.00, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Specialized tier.
+
+  - id: mock-reviewer
+    provider: mock
+    family: mock-reviewer
+    test_only: true
+    aliases: []
+    tier_affinity: [TIER-5]
+    capabilities:
+      reasoning: advanced
+      tool_use: true
+      context_window_tokens: 200000
+      specialties: [code_review, security]
+    availability: verified_available
+    reliability: 0.96
+    latency_class: standard
+    cost: { input_per_mtok: 4.00, output_per_mtok: 12.00, currency: USD }
+    verified_at: "2026-11-16"
+    notes: Fixture. Independent review tier.

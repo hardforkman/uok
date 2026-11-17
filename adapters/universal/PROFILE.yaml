@@ -1,0 +1,67 @@
+schema: adapter_profile
+schema_version: 1
+adapter: universal
+researched_at: "2026-11-16"
+# Baseline assumptions for an unknown environment. The receiving agent MUST
+# overwrite statuses with probe results during installation (directive step 5).
+capabilities:
+  instruction_files:
+    status: unknown
+    native_mechanism: "repo markdown convention (AGENTS.md) or per-prompt injection"
+    evidence: "fallback design, not a product claim"
+    fallback: per_prompt_injection
+  custom_agents:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: role_session_pattern
+  per_agent_model_selection:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: single_model_role_routing
+  parallel_dispatch:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: sequential_execution
+  background_execution:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: sequential_execution
+  worktree_isolation:
+    status: unknown
+    native_mechanism: "git worktree add (if git repo + shell available)"
+    evidence: "generic git capability; probe"
+    fallback: resource_lock
+  blocking_hooks:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: orchestrator_pre_dispatch_checks
+  permission_modes:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: orchestrator_pre_dispatch_checks
+  mcp:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: direct_tool_calling
+  headless_invocation:
+    status: unknown
+    native_mechanism: "any compatible agent CLI if present"
+    evidence: "probe command -v and --help"
+    fallback: direct_provider_api
+  context_isolation:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: envelope_discipline
+  nesting:
+    status: unknown
+    native_mechanism: null
+    evidence: "assume none until probed"
+    fallback: flatten_hierarchy

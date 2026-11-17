@@ -1,0 +1,65 @@
+schema: adapter_profile
+schema_version: 1
+adapter: codex
+researched_at: "2026-11-16"
+capabilities:
+  instruction_files:
+    status: verified_doc
+    native_mechanism: "AGENTS.md; /init generates it; discovery locations unconfirmed"
+    evidence: "https://learn.chatgpt.com/docs/codex/cli"
+    fallback: null
+  custom_agents:
+    status: verified_doc
+    native_mechanism: "subagents supported (/subagents); agents.enabled; definition format not found in reviewed page"
+    evidence: "https://learn.chatgpt.com/docs/agent-configuration/subagents ; config reference"
+    fallback: profile_scoped_role_sessions
+  per_agent_model_selection:
+    status: verified_doc
+    native_mechanism: "agents.default_subagent_model / default_subagent_reasoning_effort; local clients allow per-agent model configs; exact per-agent mechanism unverified"
+    evidence: "https://learn.chatgpt.com/docs/config-file/config-reference (via redirect) ; subagents page"
+    fallback: profile_scoped_role_sessions
+  parallel_dispatch:
+    status: verified_doc
+    native_mechanism: "subagents run in parallel; agents.max_concurrent_threads_per_session"
+    evidence: "https://learn.chatgpt.com/docs/agent-configuration/subagents ; config reference"
+    fallback: null
+  background_execution:
+    status: unverified
+    native_mechanism: "cloud tasks exist; CLI background mechanism unconfirmed"
+    evidence: "secondary research"
+    fallback: headless_role_sessions
+  worktree_isolation:
+    status: unverified
+    native_mechanism: null
+    evidence: "not confirmed this session"
+    fallback: resource_lock
+  blocking_hooks:
+    status: verified_doc
+    native_mechanism: "features.hooks; hooks.json or inline [hooks]; event schema unverified"
+    evidence: "config reference (via redirect)"
+    fallback: orchestrator_pre_dispatch_checks
+  permission_modes:
+    status: verified_doc
+    native_mechanism: "approval_policy on-request|never (+granular keys); codex exec read-only sandbox default; --sandbox; --full-auto removed"
+    evidence: "config reference ; https://learn.chatgpt.com/docs/non-interactive-mode"
+    fallback: null
+  mcp:
+    status: verified_doc
+    native_mechanism: "codex mcp add/inspect local+remote servers"
+    evidence: "https://learn.chatgpt.com/docs/codex/cli"
+    fallback: null
+  headless_invocation:
+    status: verified_doc
+    native_mechanism: "codex exec [--json] [--sandbox] [--skip-git-repo-check] [--profile]"
+    evidence: "https://learn.chatgpt.com/docs/non-interactive-mode ; config reference"
+    fallback: null
+  context_isolation:
+    status: verified_doc
+    native_mechanism: "each subagent performs its own model/tool work (separate context implied); token cost grows"
+    evidence: "https://learn.chatgpt.com/docs/agent-configuration/subagents"
+    fallback: null
+  nesting:
+    status: unknown
+    native_mechanism: null
+    evidence: "not found in reviewed docs"
+    fallback: flatten_hierarchy
