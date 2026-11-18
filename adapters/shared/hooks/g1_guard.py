@@ -349,14 +349,14 @@ def rel(path):
 
 
 def load_yaml_list(path, key):
-    """Tiny parser: list items under `key:` in project.yaml (no PyYAML dependency)."""
+    """Tiny parser: list items under `key:` at any indent (no PyYAML dependency)."""
     try:
         lines = open(path).read().splitlines()
     except OSError:
         return []
     out, on, indent = [], False, None
     for ln in lines:
-        if re.match(r"\s+" + re.escape(key) + r":", ln):
+        if re.match(r"\s*" + re.escape(key) + r":", ln):
             on, indent = True, len(ln) - len(ln.lstrip()); continue
         if on:
             m = re.match(r"\s+- \"?([^\"#]+?)\"?\s*(#.*)?$", ln)
@@ -365,6 +365,31 @@ def load_yaml_list(path, key):
             elif ln.strip() and not ln.strip().startswith("#"):
                 break
     return out
+
+
+def host_state_dirs():
+    """`host_state_write_exceptions` from adapter.yaml (or claude-code.yaml): host-owned state
+    dirs (~ expanded) that main may write though they lie outside the root — the host's own
+    persistent memory otherwise breaks while the hook is active. Empty unless the policy lists them."""
+    for name in ("adapter.yaml", "claude-code.yaml"):
+        entries = load_yaml_list(os.path.join(ROOT, ".orchestrator", "policy", name),
+                                 "host_state_write_exceptions")
+        if entries:
+            return entries
+    return []
+
+
+def in_host_state(agent, path):
+    """ISO-02 carve-out, main only; uok-* workers never get it (their isolation is the point).
+    Runs after SEC-02, so secret-bearing paths stay denied even under an exception."""
+    if agent.startswith("uok-"):
+        return False
+    r = resolve(path).lower()
+    for d in host_state_dirs():
+        b = resolve(d).lower().rstrip(os.sep)
+        if r == b or r.startswith(b + os.sep):
+            return True
+    return False
 
 
 def active_claims():
@@ -425,7 +450,7 @@ def check_path(tool, agent, path):
             any((rel(path).lower() + "/").startswith(p) for p in NO_READ_FOR_UOK):
         decide("deny", f"{agent}: read of audit log / claims ledger blocked (SEC-04): {rel(path)!r}")
     if tool in WRITE_TOOLS:
-        if not inside_root(path):
+        if not inside_root(path) and not in_host_state(agent, path):
             decide("deny", f"write outside project root blocked (ISO-02): {resolve(path)!r}")
         if agent.startswith("uok-") and (any((rel(path).lower() + "/").startswith(p) for p in PROTECTED)
                                         or os.path.basename(rel(path)).lower() in PROTECTED_NAMES):

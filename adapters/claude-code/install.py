@@ -319,7 +319,11 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
                "# Read by .orchestrator/hooks/g1_guard.py. Workers (uok-*) cannot write this file.\n"
                f"enforcement: {self.mode}        # standard | strict\n"
                f"kit_dir: \"{self.kit_rel}\"\n"
-               f"kit_version: \"{KIT_VERSION}\"\n")
+               f"kit_version: \"{KIT_VERSION}\"\n"
+               "# Host-owned state dirs (~/.claude/) that main may write despite ISO-02 (the host's\n"
+               "# own persistent memory lives outside the project); never applies to uok-* workers.\n"
+               "host_state_write_exceptions:\n"
+               "  - \"~/.claude/\"\n")
         self.write(os.path.join(pol, "claude-code.yaml"), cfg, f"adapter settings (enforcement: {self.mode})")
 
     def step_ignores(self):

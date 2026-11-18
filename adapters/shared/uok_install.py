@@ -184,13 +184,18 @@ class BaseInstaller:
                        "from templates/AGENT-CONFIG.yaml")
         else:
             self.kept.append(".orchestrator/policy/agents.yaml (existing, kept)")
+        hs = {"qoder": "~/.qoder/", "cursor": "~/.cursor/", "codex": "~/.codex/"}.get(self.HOST)
+        exc = (f"# Host-owned state dirs ({hs}) that main may write despite ISO-02 (the host's own\n"
+               "# persistent memory lives outside the project); never applies to uok-* workers.\n"
+               "host_state_write_exceptions:\n"
+               f'  - "{hs}"\n') if hs else ""
         self.write(os.path.join(pol, "adapter.yaml"),
                    f"# Adapter settings written by install.py (kit {KIT_VERSION}). Read by .orchestrator/hooks/g1_guard.py.\n"
                    "# Workers cannot write this file.\n"
                    f"host: {self.HOST}\n"
                    f"enforcement: {self.mode}        # standard | strict\n"
                    f"kit_dir: \"{self.kit_rel}\"\n"
-                   f"kit_version: \"{KIT_VERSION}\"\n",
+                   f"kit_version: \"{KIT_VERSION}\"\n" + exc,
                    f"adapter settings (host {self.HOST}, enforcement {self.mode})")
 
     def step_ignores(self):

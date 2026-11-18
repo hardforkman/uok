@@ -41,9 +41,11 @@ class G1GuardTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, True)
 
     # helpers
-    def run_full(self, stdin_text):
+    def run_full(self, stdin_text, extra_env=None):
         """Run the hook; return (decision, reason). Crash => test failure (T1)."""
         env = dict(os.environ, CLAUDE_PROJECT_DIR=self.root)
+        if extra_env:
+            env.update(extra_env)
         p = subprocess.run([sys.executable, "-I", HOOK], input=stdin_text, capture_output=True,
                            text=True, env=env, timeout=30)
         self.assertEqual(p.returncode, 0, f"hook exit {p.returncode}; stderr={p.stderr!r}")
@@ -60,11 +62,11 @@ class G1GuardTest(unittest.TestCase):
     def run_event(self, tool, tool_input, agent=None):
         return self.run_event_full(tool, tool_input, agent)[0]
 
-    def run_event_full(self, tool, tool_input, agent=None):
+    def run_event_full(self, tool, tool_input, agent=None, extra_env=None):
         ev = {"tool_name": tool, "tool_input": tool_input}
         if agent:
             ev["agent_type"] = agent
-        result = self.run_full(json.dumps(ev))
+        result = self.run_full(json.dumps(ev), extra_env)
         if result[0] == "allow":
             # N-T1: a real allow is logged as "allow:"; a swallowed crash is "fail-open:".
             last = self.audit_log().strip().splitlines()[-1:] or [""]
@@ -128,6 +130,45 @@ class G1GuardTest(unittest.TestCase):
         self.assertDecision(
             self.run_event_full("Write", {"file_path": self.outside(), "content": "hi"}),
             "deny", "ISO-02")
+
+    # ISO-02 carve-out: host_state_write_exceptions (host memory lives outside the root)
+    def set_host_state(self, entries):
+        base = tempfile.mkdtemp(prefix="uok_host_state_")
+        self.addCleanup(shutil.rmtree, base, True)
+        with open(os.path.join(self.root, ".orchestrator", "policy", "claude-code.yaml"), "a") as f:
+            f.write("host_state_write_exceptions:\n" + "".join(f'  - "{e}"\n' for e in entries))
+        return base
+
+    def test_host_state_write_main_allowed(self):
+        base = self.set_host_state([tempfile.gettempdir()])
+        self.assertDecision(
+            self.run_event_full("Write", {"file_path": os.path.join(base, "memory.md"),
+                                          "content": "note"}), "allow")
+
+    def test_host_state_write_worker_denied(self):
+        base = self.set_host_state([tempfile.gettempdir()])
+        self.assertDecision(
+            self.run_event_full("Write", {"file_path": os.path.join(base, "memory.md"),
+                                          "content": "note"}, "uok-implementation-engineer"),
+            "deny", "ISO-02")
+
+    def test_host_state_write_outside_exception_denied(self):
+        self.set_host_state([os.path.join(tempfile.gettempdir(), "uok_host_state_x")])
+        self.assertDecision(
+            self.run_event_full("Write", {"file_path": self.outside(), "content": "hi"}),
+            "deny", "ISO-02")
+
+    def test_host_state_secret_path_denied(self):
+        base = self.set_host_state([tempfile.gettempdir()])
+        self.assertDecision(
+            self.run_event_full("Write", {"file_path": os.path.join(base, ".env"),
+                                          "content": "UOK_TEST_FIXTURE=1"}), "deny", "SEC-02")
+
+    def test_host_state_tilde_entry_expanded(self):
+        base = self.set_host_state(["~/uok_hs_fixture"])
+        self.assertDecision(
+            self.run_event_full("Write", {"file_path": os.path.join(base, "uok_hs_fixture", "memory.md"),
+                                          "content": "note"}, extra_env={"HOME": base}), "allow")
 
     def test_write_secret_content_denied(self):
         self.assertDecision(
