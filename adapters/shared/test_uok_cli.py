@@ -212,6 +212,7 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         self.git(self.upstream, "init", "-q", "-b", "main")
         self.git(self.upstream, "add", "-A")
         self.git(self.upstream, "commit", "-q", "-m", "v1")
+        self.git(self.upstream, "tag", "v1.0.0")
         self.kit = self.tmp / "shared" / "kit"
         self.kit.parent.mkdir()
         self.git(self.tmp, "clone", "-q", str(self.upstream), str(self.kit))
@@ -264,6 +265,7 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         inst.write_text(text.replace("Report results with actual command output",
                                      "Report results with actual command output (UPDATED-MARKER)"))
         self.git(self.upstream, "commit", "-q", "-am", "v2")
+        self.git(self.upstream, "tag", "v1.1.0")
         r = subprocess.run(["bash", str(self.kit / "updater.sh")], capture_output=True, text=True,
                            env=self.env, cwd=str(self.tmp), timeout=900)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -280,6 +282,7 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         inst.write_text(inst.read_text().replace("Report results with actual command output",
                                                  "Report results with actual command output (UPDATED-MARKER)"))
         self.git(self.upstream, "commit", "-q", "-am", "v2")
+        self.git(self.upstream, "tag", "v1.1.0")
         r = subprocess.run(["bash", str(self.kit / "updater.sh"), "--no-refresh"], capture_output=True, text=True,
                            env=self.env, cwd=str(self.tmp), timeout=900)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -298,6 +301,82 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         r = self.kit_run(["refresh"])
         self.assertEqual(r.returncode, 0)
         self.assertIn("no projects recorded", r.stdout)
+
+
+    def updater(self, *args):
+        return subprocess.run(["bash", str(self.kit / "updater.sh"), *args], capture_output=True, text=True,
+                              env=self.env, cwd=str(self.tmp), timeout=900)
+
+    def upstream_commit(self, name, tag=None):
+        (self.upstream / f"{name}.txt").write_text(name + "\n")
+        self.git(self.upstream, "add", "-A")
+        self.git(self.upstream, "commit", "-q", "-m", name)
+        if tag:
+            self.git(self.upstream, "tag", tag)
+
+    def kit_head(self):
+        return self.git(self.kit, "rev-parse", "HEAD").strip()
+
+    def test_updater_default_follows_release_tag_not_main(self):
+        self.upstream_commit("released", tag="v1.1.0")
+        self.upstream_commit("unreleased-work")
+        r = self.updater("--no-refresh")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("release v1.1.0", r.stdout)
+        self.assertTrue((self.kit / "released.txt").exists())
+        self.assertFalse((self.kit / "unreleased-work.txt").exists())
+
+    def test_updater_edge_follows_main(self):
+        self.upstream_commit("released", tag="v1.1.0")
+        self.upstream_commit("unreleased-work")
+        r = self.updater("--edge", "--no-refresh")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((self.kit / "unreleased-work.txt").exists())
+
+    def test_updater_picks_highest_semver_tag(self):
+        self.upstream_commit("a", tag="v1.9.0")
+        self.upstream_commit("b", tag="v1.10.0")
+        r = self.updater("--no-refresh")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("release v1.10.0", r.stdout)
+        self.assertTrue((self.kit / "b.txt").exists())
+
+    def test_updater_ignores_non_release_tags(self):
+        self.upstream_commit("c", tag="v2.0.0-rc1")
+        r = self.updater("--no-refresh")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("already up to date", r.stdout)
+        self.assertFalse((self.kit / "c.txt").exists())
+
+    def test_updater_check_changes_nothing(self):
+        self.upstream_commit("released", tag="v1.1.0")
+        before = self.kit_head()
+        r = self.updater("--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("release v1.1.0", r.stdout)
+        self.assertEqual(self.kit_head(), before)
+
+    def test_updater_ahead_of_latest_release_is_up_to_date(self):
+        self.upstream_commit("work")
+        self.updater("--edge", "--no-refresh")
+        head = self.kit_head()
+        r = self.updater("--no-refresh")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("already up to date", r.stdout)
+        self.assertEqual(self.kit_head(), head)
+
+    def test_updater_without_any_release_tag_points_to_edge(self):
+        self.git(self.upstream, "tag", "-d", "v1.0.0")
+        self.git(self.kit, "tag", "-d", "v1.0.0")
+        r = self.updater("--no-refresh")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--edge", r.stderr)
+
+    def test_version_flag_reads_version_file(self):
+        (self.kit / "VERSION").write_text("9.8.7\n")
+        r = self.kit_run(["--version"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("9.8.7", r.stdout)
 
 
 if __name__ == "__main__":

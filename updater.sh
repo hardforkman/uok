@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Universal Orchestrator Kit updater (kit 1.0.0).
 #
-# Updates the kit from its GitHub repository with `git pull` (fast-forward only).
+# Updates the kit from its GitHub repository (fast-forward only, never rewrites history).
 #
-#   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh            # update
-#   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh --check    # show incoming commits, change nothing
+#   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh            # update to the latest RELEASE (tag vX.Y.Z)
+#   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh --edge     # follow the main branch instead (unreleased)
+#   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh --check    # show what would come, change nothing
 #   bash UNIVERSAL-ORCHESTRATOR-KIT/updater.sh --no-refresh  # update the kit only
+#
+# Releases are the default on purpose: the update also rewrites the G1 hook, agents and policy in
+# every project (`uok refresh`), so only deliberately released versions should reach them.
 #
 # Source of the update, in order of precedence:
 #   1. $UOK_REPO           e.g. UOK_REPO=https://github.com/<owner>/UNIVERSAL-ORCHESTRATOR-KIT.git
@@ -23,11 +27,13 @@ set -euo pipefail
 KIT_DIR="$(cd "$(dirname "$0")" && pwd -P)"   # -P: resolve symlinks like git does
 CHECK=0
 REFRESH=1
+EDGE=0
 for arg in "$@"; do
     case "$arg" in
         --check) CHECK=1 ;;
         --no-refresh) REFRESH=0 ;;
-        *) echo "updater: unknown option: $arg (use --check or --no-refresh)" >&2; exit 2 ;;
+        --edge) EDGE=1 ;;
+        *) echo "updater: unknown option: $arg (use --check, --edge or --no-refresh)" >&2; exit 2 ;;
     esac
 done
 
@@ -64,26 +70,41 @@ UOK_REPO=https://github.com/<owner>/UNIVERSAL-ORCHESTRATOR-KIT.git bash $0"
 fi
 
 BRANCH="$(git -C "$KIT_DIR" rev-parse --abbrev-ref HEAD)"
-note "fetching $REMOTE ($BRANCH)…"
-git -C "$KIT_DIR" fetch "$REMOTE" "$BRANCH"
+[ "$BRANCH" != "HEAD" ] || die "the kit is on a detached HEAD. Check out its branch first: git -C \"$KIT_DIR\" checkout main"
 
-INCOMING="$(git -C "$KIT_DIR" rev-list --count HEAD.."refs/remotes/$REMOTE/$BRANCH")"
+if [ "$EDGE" -eq 1 ]; then
+    note "fetching $REMOTE ($BRANCH, unreleased)..."
+    git -C "$KIT_DIR" fetch "$REMOTE" "$BRANCH"
+    TARGET="refs/remotes/$REMOTE/$BRANCH"
+    LABEL="$REMOTE/$BRANCH"
+else
+    note "fetching $REMOTE (releases)..."
+    git -C "$KIT_DIR" fetch "$REMOTE" --tags
+    TAG="$(git -C "$KIT_DIR" tag --list 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+    [ -n "$TAG" ] || die "no release tags (vX.Y.Z) found in $REMOTE. Use --edge to follow the $BRANCH branch."
+    TARGET="refs/tags/$TAG^{commit}"
+    LABEL="release $TAG"
+fi
+
+INCOMING="$(git -C "$KIT_DIR" rev-list --count HEAD.."$TARGET")"
 if [ "$INCOMING" -eq 0 ]; then
-    note "already up to date ($(git -C "$KIT_DIR" rev-parse --short HEAD))."
+    note "already up to date: at or ahead of $LABEL ($(git -C "$KIT_DIR" rev-parse --short HEAD))."
     exit 0
 fi
 
-git -C "$KIT_DIR" log --oneline HEAD.."refs/remotes/$REMOTE/$BRANCH" | head -20
+note "$LABEL: $INCOMING commit(s) to apply:"
+git -C "$KIT_DIR" log --oneline HEAD.."$TARGET" | head -20
 if [ "$CHECK" -eq 1 ]; then
-    note "--check: $INCOMING commit(s) available, nothing changed."
+    note "--check: nothing changed."
     exit 0
 fi
 
-if ! git -C "$KIT_DIR" merge --ff-only "refs/remotes/$REMOTE/$BRANCH"; then
-    die "local branch diverged from $REMOTE/$BRANCH. Resolve manually:
-git -C \"$KIT_DIR\" rebase $REMOTE/$BRANCH"
+if ! git -C "$KIT_DIR" merge --ff-only "$TARGET"; then
+    die "local branch diverged from $LABEL. Resolve manually:
+git -C \"$KIT_DIR\" rebase $LABEL"
 fi
-note "updated to $(git -C "$KIT_DIR" rev-parse --short HEAD)."
+VERSION_NOW="$(cat "$KIT_DIR/VERSION" 2>/dev/null || true)"
+note "updated to $LABEL${VERSION_NOW:+ (kit $VERSION_NOW)} at $(git -C "$KIT_DIR" rev-parse --short HEAD)."
 if [ "$REFRESH" -eq 1 ]; then
     command -v python3 >/dev/null 2>&1 || die "python3 is required to refresh projects (re-run later: python3 \"$KIT_DIR/uok\" refresh)"
     python3 "$KIT_DIR/uok" refresh
