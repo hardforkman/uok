@@ -42,3 +42,7 @@ bash ~/uok/updater.sh --no-refresh   # обновить только папку 
 - `AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md` — пошаговая инструкция для агента.
 - `adapters/` — установщики и описания сред.
 - `handoff/` — отчёты о проверках и шаблон отчёта.
+
+## Лицензия
+
+MIT, см. файл `LICENSE` (c) 2026 hardforkman.
