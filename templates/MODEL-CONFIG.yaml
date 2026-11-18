@@ -25,7 +25,7 @@ tier_bindings:
   TIER-2: { model_id: null, selector: null }
   TIER-3: { model_id: null, selector: null }
   TIER-4: { model_id: null, selector: null }
-  TIER-5: { model_id: null, selector: null }   # prefer a DIFFERENT family than TIER-2/3 implementers
+  TIER-5: { model_id: null, selector: null }   # reviewer = the MOST CAPABLE model this host offers (e.g. Claude Code: fable); if unavailable (e.g. out of credits) fall back to the next most capable one and record degraded_review_independence
 
 # --- Availability probing (RT-05, NS-07) ----------------------------------------
 availability_probe:

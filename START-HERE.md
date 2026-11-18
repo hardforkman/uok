@@ -61,6 +61,9 @@ Direct installer invocation remains available. Run each installer with `--dry-ru
 All of them share `adapters/shared/` (installer core + G1 hook).
 Every installer also creates a launcher skill: run `/uok <task>` (Claude Code, Qoder, Cursor) or the
 `$uok` mention (Codex) to start orchestration; see USAGE-GUIDE-RU §6.1 and your adapter README §12-13.
+Start the argument with a role id (`/uok research-analyst <task>`) to call one agent, with `all` to run the
+full roster, or use `/uok roles` to list roles. Update the kit from its git remote with `bash updater.sh`
+(`--check` previews; see README "Обновление").
 
 Live checks for Qoder, Cursor and Codex: paste the prompt from
 [handoff/LIVE-CHECKS.md](handoff/LIVE-CHECKS.md) into that application's agent chat.

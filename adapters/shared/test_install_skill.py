@@ -36,7 +36,7 @@ def load_installer(host):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     if host == "claude-code":
-        return mod.Installer, {"tier1": "haiku", "tier2": "sonnet", "tier3": "opus", "review": "opus"}
+        return mod.Installer, {"tier1": "haiku", "tier2": "sonnet", "tier3": "opus", "review": "fable"}
     cls = getattr(mod, {"qoder": "QoderInstaller", "cursor": "CursorInstaller", "codex": "CodexInstaller"}[host])
     return cls, dict(cls.DEFAULT_MODELS)
 
@@ -70,6 +70,12 @@ class SkillStepTest(unittest.TestCase):
                 self.assertIn("EXECUTION-LIFECYCLE.md", body)
                 self.assertIn("human approval", body)
                 self.assertIn(invoke, fm["description"])
+                self.assertIn("Argument routing", body)
+                self.assertIn("**all**", body)
+                self.assertIn("research-analyst", body)
+                self.assertIn("most capable model", body)
+                self.assertIn("fall back", body)
+                self.assertIn("fall back", body)
 
     def test_claude_skill_is_user_only_with_arguments(self):
         inst = self.installer("claude-code")
@@ -77,7 +83,7 @@ class SkillStepTest(unittest.TestCase):
         text = Path(self.root, HOSTS["claude-code"][0]).read_text(encoding="utf-8")
         fm, body = frontmatter(text)
         self.assertIs(fm.get("disable-model-invocation"), True)
-        self.assertEqual(fm.get("argument-hint"), "[task]")
+        self.assertEqual(fm.get("argument-hint"), "[role|all|roles] [task]")
         self.assertIn("$ARGUMENTS", body)
 
     def test_idempotent_rerun(self):
@@ -111,6 +117,42 @@ class SkillStepTest(unittest.TestCase):
                 self.assertEqual(Path(path).read_text(encoding="utf-8"), mine)
                 self.assertTrue(inst.warnings)
                 self.assertFalse(inst.changes)
+
+    def test_policy_yaml_written_to_host_own_file(self):
+        """Each host's settings land in the yaml the hook actually reads:
+        claude-code -> claude-code.yaml; qoder/cursor/codex -> adapter.yaml (host: <host>),
+        each with its own host_state_write_exceptions dir."""
+        expect = {"claude-code": ("claude-code.yaml", "~/.claude/"),
+                  "qoder": ("adapter.yaml", "~/.qoder/"),
+                  "cursor": ("adapter.yaml", "~/.cursor/"),
+                  "codex": ("adapter.yaml", "~/.codex/")}
+        for host, (name, exc) in expect.items():
+            with self.subTest(host=host):
+                self.root = tempfile.mkdtemp(prefix="uok-skill-test-")   # fresh root per host
+                self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+                inst = self.installer(host)
+                inst.step_dirs()
+                inst.step_policy()
+                path = os.path.join(self.root, ".orchestrator", "policy", name)
+                self.assertTrue(os.path.exists(path), f"{host}: {name} not created")
+                text = Path(path).read_text(encoding="utf-8")
+                self.assertIn("host_state_write_exceptions", text)
+                self.assertIn(exc, text)
+                if host != "claude-code":
+                    self.assertIn(f"host: {host}", text)
+                    self.assertFalse(os.path.exists(os.path.join(self.root, ".orchestrator",
+                                                                "policy", "claude-code.yaml")),
+                                     f"{host}: claude-code.yaml must not be created by this installer")
+
+    def test_claude_code_default_reviewer_is_most_capable_model(self):
+        import importlib.util as iu
+        spec = iu.spec_from_file_location("cc_install", os.path.join(ADAPTERS, "claude-code", "install.py"))
+        mod = iu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        models = mod.parse_models("")
+        self.assertEqual(models["review"], "fable")
+        self.assertEqual(models["tier3"], "opus")
+        self.assertEqual(mod.parse_models("review=opus")["review"], "opus")
 
 
 if __name__ == "__main__":

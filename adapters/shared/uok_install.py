@@ -279,12 +279,29 @@ Task: $ARGUMENTS
 If the placeholder above was not expanded by the host, or no task text came with the invocation,
 use the user's accompanying message as the task; if there is none, ask for the task before acting.
 
+**Argument routing** — inspect the first word of the task text:
+- a **role id** (`architect`, `senior-engineer`, `implementation-engineer`, `research-analyst`,
+  `debugging-specialist`, `test-engineer`, `security-reviewer`, `code-reviewer`,
+  `documentation-specialist`, `release-integration`): dispatch ONLY that `uok-<role>` for the
+  rest of the task text (single-role session; kit rules still apply — claims, G1 hook, approvals,
+  evidence). Do not decompose or route to other roles.
+- **all**: attach the full roster — verify every `uok-*` role this host supports is registered
+  (agent files/rules loaded), list the roster with tier and model, then run the rest of the
+  task text through the full lifecycle with the complete roster.
+- **roles**: list the supported `uok-*` roles with tier and model, then stop (no task run).
+- otherwise: run the full orchestration lifecycle on the whole task text.
+
 Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
 1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
    resolve dependencies (no cycles).
 2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
    sufficient tier (the ladder is TIER-1…TIER-5; trivial tasks are TIER-1 — there is no TIER-0),
    matching `uok-*` role; never escalate into TIER-5; exhaustion ⇒ ask the human.
+   The reviewer tier (TIER-5) always gets the most capable model this host offers (bound in
+   `.orchestrator/policy/models.yaml`; if unbound, pick the strongest model the host lists and say so).
+   If a bound model turns out unavailable (e.g. out of credits), fall back to the next most capable
+   available model of the host and record the degradation
+   (`degraded_review_independence` / `degraded_model_routing`) in the report.
 3. Before parallel writers, record disjoint write claims in `.orchestrator/claims/active.json`;
    release them when done.
 4. Sensitive operations (production deploy, financial actions, irreversible data changes,

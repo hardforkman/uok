@@ -4,7 +4,7 @@
 Installs the kit into a project for Claude Code, additively and idempotently:
 
   python3 UNIVERSAL-ORCHESTRATOR-KIT/adapters/claude-code/install.py [--project DIR]
-          [--mode standard|strict] [--models tier1=haiku,tier2=sonnet,tier3=opus,review=opus]
+          [--mode standard|strict] [--models tier1=haiku,tier2=sonnet,tier3=opus,review=fable]
           [--dry-run]
 
 What it does (AUTONOMOUS-IMPLEMENTATION-DIRECTIVE steps 8-12, Claude Code specifics):
@@ -207,7 +207,7 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
         text = f"""---
 name: uok
 description: "Run a task through the Universal Orchestrator Kit {SKILL_MARK}: classify, route to uok-* roles, enforce claims/approvals/review, report with evidence. Use when the user invokes /uok with an engineering task."
-argument-hint: "[task]"
+argument-hint: "[role|all|roles] [task]"
 disable-model-invocation: true
 ---
 
@@ -218,12 +218,29 @@ The user launched this skill to run a task through the kit. Follow the marked UO
 Task: $ARGUMENTS
 If no task text came with the invocation, ask the user for the task before acting.
 
+**Argument routing** — inspect the first word of the task text:
+- a **role id** (`architect`, `senior-engineer`, `implementation-engineer`, `research-analyst`,
+  `debugging-specialist`, `test-engineer`, `security-reviewer`, `code-reviewer`,
+  `documentation-specialist`, `release-integration`): dispatch ONLY that `uok-<role>` agent
+  (Task tool, subagent_type `uok-<role>`) for the rest of the task text (single-role session;
+  kit rules still apply — claims, G1 hook, approvals, evidence). Do not decompose or route
+  to other roles.
+- **all**: attach the full roster — verify every `uok-*` agent file in `.claude/agents/` is
+  present and list the roster with tier and model, then run the rest of the task text through
+  the full lifecycle with the complete roster.
+- **roles**: list the `uok-*` roles with tier and model, then stop (no task run).
+- otherwise: run the full orchestration lifecycle on the whole task text.
+
 Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
 1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
    resolve dependencies (no cycles).
 2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
    sufficient tier (the ladder is TIER-1…TIER-5; trivial tasks are TIER-1 — there is no TIER-0),
    matching `uok-*` role; never escalate into TIER-5; exhaustion ⇒ ask the human.
+   The reviewer tier (TIER-5) always gets the most capable model this host offers (Claude Code:
+   `fable`). If a bound model turns out unavailable (e.g. out of credits), fall back to the next
+   most capable available model (reviewers: `fable` -> `opus`) and record the degradation
+   (`degraded_review_independence` / `degraded_model_routing`) in the report.
 3. Before parallel writers, record disjoint write claims in `.orchestrator/claims/active.json`;
    release them when done.
 4. Sensitive operations (production deploy, financial actions, irreversible data changes,
@@ -386,7 +403,7 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
 
 
 def parse_models(spec):
-    models = {"tier1": "haiku", "tier2": "sonnet", "tier3": "opus", "review": "opus"}
+    models = {"tier1": "haiku", "tier2": "sonnet", "tier3": "opus", "review": "fable"}
     for part in filter(None, (spec or "").split(",")):
         k, _, v = part.partition("=")
         if k.strip() not in models or not re.fullmatch(r"[A-Za-z0-9._\-\[\]]+", v.strip()):

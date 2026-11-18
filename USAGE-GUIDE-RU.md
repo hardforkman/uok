@@ -34,7 +34,7 @@ Kit version: 1.0.0 · Spec version: 1.0.0 · Обновлено: 2026-11-17
 | Спецификация + протоколы (16 схем) | specification_complete | self_test 16/16 |
 | Эталонное ядро + 12 сценариев | integration_tested | behavior_tests 51/51 (после независимого аудита, все 12 замечаний закрыты) |
 | Хук безопасности G1 | verified_local | 123/123 теста; живьём проверен в Claude Code |
-| Скилл-ярлык `/uok` + CLI `uok init` | verified_local; `uok init` — verified_live в Qoder | test_install_skill 5/5, test_uok_cli 11/11; живая цепочка bootstrap → скилл → установка → `/uok <задача>` → диспетчеризация воркера → запреты G1 (SEC-04 запись воркера, SEC-02 чтение .env), Qoder Desktop 2026-11-17 ([отчёт](handoff/INSTALLATION-REPORT-qoder-2026-11-17.md)); полный цикл SEC-07 (ask хука → отказ человека) подтверждён живьём в default-режиме; claims и два параллельных воркера с непересекающимися заявками тоже подтверждены живьём (шаг 16 отчёта); read-only пробник `uok-research-analyst` пройден (шаг 17) — все пункты LIVE-CHECKS a–e закрыты; другие среды — ещё нет |
+| Скилл-ярлык `/uok` + CLI `uok init` | verified_local; `uok init` — verified_live в Qoder | test_install_skill 7/7, test_uok_cli 21/21; живая цепочка bootstrap → скилл → установка → `/uok <задача>` → диспетчеризация воркера → запреты G1 (SEC-04 запись воркера, SEC-02 чтение .env), Qoder Desktop 2026-11-17 ([отчёт](handoff/INSTALLATION-REPORT-qoder-2026-11-17.md)); полный цикл SEC-07 (ask хука → отказ человека) подтверждён живьём в default-режиме; claims и два параллельных воркера с непересекающимися заявками тоже подтверждены живьём (шаг 16 отчёта); read-only пробник `uok-research-analyst` пройден (шаг 17) — все пункты LIVE-CHECKS a–e закрыты; другие среды — ещё нет |
 | Адаптер Claude Code | integration_tested | живая установка и проверки 1–12 ([отчёт](handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md)) |
 | Адаптер Qoder | integration_tested | живые проверки в Qoder Desktop 2026-11-17: установка через `uok init`, `/uok`, диспетчеризация воркеров (read-only и писатель), запреты SEC-02/04, полный цикл SEC-07, claims и параллельные воркеры (LC-04) — все пункты a–e verified_live ([отчёт](handoff/INSTALLATION-REPORT-qoder-2026-11-17.md)); селекторы моделей не проверены (конфигурационный пробел) |
 | Адаптеры Cursor / Codex | implementation_available | Cursor: живые проверки 2026-11-17 выполнены частично — ISO-02 и SEC-02 (Write) verified_live; найдены 2 дефекта (хост не исполняет hook `ask`; `beforeReadFile` только для существующих файлов), кит исправлен fail-closed (ask→deny), ждут повторных пробников ([отчёт](handoff/INSTALLATION-REPORT-cursor-2026-11-17.md)). Codex: CLI не установлен, живые проверки впереди ([промпты](handoff/LIVE-CHECKS.md)) |
@@ -197,6 +197,24 @@ true` — запускается только человеком; `$ARGUMENTS` �
 В Cursor и Codex аргументы в файл скилла не подставляются — пишите задачу
 в том же сообщении. Если имя `uok` уже занято вашим скиллом, установщик
 его не трогает и сообщает об этом. После установки перезапустите сессию.
+
+**Маршрутизация аргументов `/uok` (первое слово задачи):**
+
+| Первый аргумент | Что происходит |
+|---|---|
+| `<роль>` (например `/uok research-analyst …`) | Запускается **только эта роль** `uok-<роль>` с текстом задачи; правила кита (claims, хук G1, одобрения, доказательства) действуют, разбиения на подзадачи нет. Роли: `architect`, `senior-engineer`, `implementation-engineer`, `research-analyst`, `debugging-specialist`, `test-engineer`, `security-reviewer`, `code-reviewer`, `documentation-specialist`, `release-integration` |
+| `all` (например `/uok all <задача>`) | **Все роли разом**: оркестратор проверяет, что каждая `uok-*` роль зарегистрирована, печатает ростер с ярусами и моделями и ведёт задачу по полному циклу с полным ростером |
+| `roles` | Просто список ролей с ярусами и моделями, без запуска задачи |
+| всё остальное | Полный цикл оркестрации по всему тексту задачи |
+
+**Модель ревьюера.** Ярус ревьюеров (TIER-5) всегда получает самую сильную
+модель той среды, где работает кит: в Claude Code это `fable`, в остальных
+средах — самая мощная модель из списка среды (Qoder по умолчанию
+`performance`, Cursor и Codex задаются через `--models review=<модель>`;
+селекторы этих сред не проверены живьём). Если эта модель недоступна
+(например, закончились кредиты), оркестратор берёт следующую по силе
+доступную модель среды (в Claude Code — `opus`) и честно помечает деградацию
+(`degraded_review_independence` / `degraded_model_routing`) в отчёте.
 
 Можно и без скилла — обычным поручением:
 

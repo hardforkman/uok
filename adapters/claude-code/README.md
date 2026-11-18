@@ -43,7 +43,7 @@ live checks to run afterwards.
 - `model` frontmatter accepts aliases or full IDs. `haiku`, `sonnet`, `opus`, `fable` resolved
   on the verification account [verified_live]; your account may differ.
 - Tier mapping (installer `--models`): TIER-1 → `tier1`, TIER-2 → `tier2`, TIER-3/4 → `tier3`,
-  reviewers (TIER-5) → `review`. Give reviewers a model different from the implementers
+  reviewers (TIER-5) → `review` (default `fable`, the most capable model of this host; fallback `opus` when unavailable). Give reviewers a model different from the implementers
   (QA-01). Same provider family remains a documented degradation: human review for critical work.
 - Aliases are environment conveniences, not architectural dependencies (RT-04).
 

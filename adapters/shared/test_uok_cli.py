@@ -197,5 +197,108 @@ class SharedKitRelocationTest(unittest.TestCase):
         self.assertNotIn(str(self.shared), skill)
 
 
+class RefreshAndUpdaterTest(unittest.TestCase):
+    """One kit folder, many projects: init records a project, refresh/updater.sh propagate kit changes."""
+
+    def setUp(self):
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.env = dict(os.environ, HOME=str(self.home), PYTHONDONTWRITEBYTECODE="1",
+                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        self.upstream = self.tmp / "upstream"
+        shutil.copytree(KIT, self.upstream, ignore=shutil.ignore_patterns("__pycache__", "backups", ".git"))
+        self.git(self.upstream, "init", "-q", "-b", "main")
+        self.git(self.upstream, "add", "-A")
+        self.git(self.upstream, "commit", "-q", "-m", "v1")
+        self.kit = self.tmp / "shared" / "kit"
+        self.kit.parent.mkdir()
+        self.git(self.tmp, "clone", "-q", str(self.upstream), str(self.kit))
+        self.proj = self.tmp / "proj"
+        self.proj.mkdir()
+
+    def git(self, cwd, *args):
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, env=self.env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout
+
+    def kit_run(self, args):
+        return subprocess.run([sys.executable, str(self.kit / "uok"), *args], capture_output=True, text=True,
+                              env=self.env, cwd=str(self.proj), timeout=900)
+
+    def registry(self):
+        import json
+        return json.loads((self.home / ".uok" / "projects.json").read_text())["projects"]
+
+    def test_init_records_project_with_models(self):
+        r = self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj), "--models", "review=fable"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        reg = self.registry()
+        self.assertEqual(len(reg), 1)
+        self.assertEqual(reg[0]["project"], os.path.realpath(self.proj))
+        self.assertEqual(reg[0]["host"], "claude-code")
+        self.assertEqual(reg[0]["models"], "review=fable")
+
+    def test_dry_run_init_records_nothing(self):
+        self.kit_run(["init", "--host", "qoder", "--project", str(self.proj), "--dry-run"])
+        self.assertFalse((self.home / ".uok" / "projects.json").exists())
+
+    def test_reinit_without_models_keeps_recorded_models(self):
+        self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj), "--models", "review=fable"])
+        r = self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("reusing models", r.stdout)
+        agent = (self.proj / ".claude" / "agents" / "uok-code-reviewer.md").read_text()
+        self.assertIn("model: fable", agent)
+        self.assertEqual(len(self.registry()), 1)
+
+    def test_updater_pulls_kit_and_refreshes_projects(self):
+        self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj), "--models", "review=fable"])
+        skill = self.proj / ".claude" / "skills" / "uok" / "SKILL.md"
+        before = skill.read_text()
+        # upstream ships a new kit version: a changed launcher skill text
+        inst = self.upstream / "adapters" / "claude-code" / "install.py"
+        text = inst.read_text()
+        self.assertIn("Report results with actual command output", text)
+        inst.write_text(text.replace("Report results with actual command output",
+                                     "Report results with actual command output (UPDATED-MARKER)"))
+        self.git(self.upstream, "commit", "-q", "-am", "v2")
+        r = subprocess.run(["bash", str(self.kit / "updater.sh")], capture_output=True, text=True,
+                           env=self.env, cwd=str(self.tmp), timeout=900)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("refresh", r.stdout)
+        after = skill.read_text()
+        self.assertNotEqual(before, after)
+        self.assertIn("UPDATED-MARKER", after)
+        self.assertIn("model: fable", (self.proj / ".claude" / "agents" / "uok-code-reviewer.md").read_text())
+
+    def test_updater_no_refresh_flag_leaves_projects(self):
+        self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj)])
+        skill = self.proj / ".claude" / "skills" / "uok" / "SKILL.md"
+        inst = self.upstream / "adapters" / "claude-code" / "install.py"
+        inst.write_text(inst.read_text().replace("Report results with actual command output",
+                                                 "Report results with actual command output (UPDATED-MARKER)"))
+        self.git(self.upstream, "commit", "-q", "-am", "v2")
+        r = subprocess.run(["bash", str(self.kit / "updater.sh"), "--no-refresh"], capture_output=True, text=True,
+                           env=self.env, cwd=str(self.tmp), timeout=900)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("UPDATED-MARKER", skill.read_text())
+
+    def test_refresh_skips_missing_project(self):
+        self.kit_run(["init", "--host", "qoder", "--project", str(self.proj)])
+        shutil.rmtree(self.proj)
+        r = self.kit_run(["refresh"]) if self.proj.exists() else subprocess.run(
+            [sys.executable, str(self.kit / "uok"), "refresh"], capture_output=True, text=True,
+            env=self.env, cwd=str(self.tmp), timeout=900)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skipping", r.stdout)
+
+    def test_refresh_with_empty_registry(self):
+        r = self.kit_run(["refresh"])
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("no projects recorded", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
