@@ -28,6 +28,7 @@ Two test layers:
 | TS-10 | A project-isolation violation prevented | ✅ | L6 |
 | TS-11 | Conflicting parallel file modifications prevented | ✅ | L3 |
 | TS-12 | Environment lacking native multi-agent support | ✅ | L2 |
+| TS-13 | Graph-aware routing: graph_impact modifier (CG-06) | ✅ | L2 |
 
 ## 2. Kernel behavior tests (executed)
 
@@ -136,3 +137,10 @@ Probe results go into the installation report
 per-probe status (`verified_live` / `not_executed` / `failed`), evidence,
 runtime mode, and the resulting adapter maturity level. A failed probe is a
 finding, not a reason to hide the probe.
+
+- **TS-13** graph-aware routing (CG-06): a fresh god-node `graph_signal` bumps a
+  CAT-02 task TIER-2 -> TIER-3 via the `graph_impact` modifier; the bump obeys the
+  TIER-3 modifier cap, leaves CAT-07 floors and TIER-5 review untouched, and fails
+  open (stale/unavailable/no-touched-node => no bump, flagged). The extractor
+  (`core/graph_signal.py`) computes degree, community spread and 1-hop impact files
+  deterministically; the routing decision records the metrics as evidence.

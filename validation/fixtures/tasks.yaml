@@ -246,3 +246,24 @@ scenarios:
       environment_in: [headless_cli, manual]
       flags_include: [degraded_multi_agent, degraded_parallelism, degraded_model_routing]
       sequential_enforced: true
+  - id: TS-13
+    name: graph-aware routing bumps tier on a fresh god-node impact signal
+    task:
+      task_id: T-demo-013
+      project_id: demo
+      title: Touch a highly-connected module
+      statement: Modify the core dispatcher that many subsystems depend on.
+      category: CAT-02
+      complexity: medium
+      reasoning: standard
+      failure_impact: medium
+      created_at: "2026-11-20T00:00:00Z"
+      graph_signal:
+        status: ok
+        max_degree: 30
+        community_spread: 1
+        impact_files: 2
+        touched_nodes: 1
+        schema_version: 48
+        graphify_version: "0.9.112"
+    expect: { tier: TIER-3, model_id: mock-advanced, decision: route }

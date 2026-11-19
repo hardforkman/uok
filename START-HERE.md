@@ -77,7 +77,7 @@ and you pass the model aliases you actually probed (`--models`).
 ```bash
 cd UNIVERSAL-ORCHESTRATOR-KIT
 python3 validation/self_test.py        # structure, YAML, cross-references, consistency
-python3 validation/behavior_tests.py   # 12 behavior scenarios against the reference kernel
+python3 validation/behavior_tests.py   # 13 behavior scenarios against the reference kernel
 ```
 
 Requires Python ≥ 3.10 and PyYAML (`pip install pyyaml`). No network access.

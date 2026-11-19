@@ -7,7 +7,7 @@ Kit version: 1.0.0 · Spec version: 1.0.0 · Requirements: VAL-01, VAL-02
 ```bash
 cd UNIVERSAL-ORCHESTRATOR-KIT
 python3 validation/self_test.py        # structural & consistency checks CHK-01…16
-python3 validation/behavior_tests.py   # behavior scenarios TS-01…12 (51 assertions)
+python3 validation/behavior_tests.py   # behavior scenarios TS-01…13 (63 assertions)
 python3 adapters/shared/hooks/test_g1_guard.py   # G1 hook suite (123 tests)
 python3 adapters/shared/test_install_skill.py    # installer skill-launcher step (5 tests, scratch projects)
 python3 adapters/shared/test_uok_cli.py          # uok launcher: init dispatch + bootstrap (11 tests, scratch HOME)
@@ -33,7 +33,7 @@ no credentials, no side effects outside reading kit files. Both scripts exit
 | CHK-10 | Template required fields + conservative defaults (strict isolation, no auto-approve, redaction/audit on, all six sensitive ops gated, independence non-removable) |
 | CHK-11 | All requirement IDs (ARCH/RT/ISO/SEC/QA/PROT/ADP/CFG/LC) present in the spec |
 | CHK-12 | Adapter docs: 13 required sections each + valid capability profiles with legal statuses |
-| CHK-13 | Traceability: AC-01…13 and TS-01…12 present in docs and fixtures |
+| CHK-13 | Traceability: AC-01…13 and TS-01…13 present in docs and fixtures |
 | CHK-14 | Secret scan across every kit file (key/token/password/private-key patterns) |
 | CHK-15 | Version header consistency across all markdown |
 | CHK-16 | Isolation/security enforcement language present in handoff contract and gates |
@@ -64,7 +64,7 @@ verification statuses until the receiving agent runs the live probes
 - 2026-11-16: `self_test.py` → 16/16 checks passed; `behavior_tests.py` →
   28/28 checks passed (macOS, Python 3.12.2, PyYAML 6.0.2).
 - 2026-11-17 (post independent audit, all findings fixed): `self_test.py` →
-  16/16 checks passed; `behavior_tests.py` → 51/51 checks passed (same
+  16/16 checks passed; `behavior_tests.py` → 63/63 checks passed (same
   environment). Re-run both after any kit modification.
 - 2026-11-17 (skill launcher added): `test_g1_guard.py` → 123/123;
   `test_install_skill.py` → 5/5 (skill creation, frontmatter, idempotency,

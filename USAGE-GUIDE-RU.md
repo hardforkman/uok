@@ -32,7 +32,7 @@ Kit version: 1.0.0 · Spec version: 1.0.0 · Обновлено: 2026-11-17
 | Компонент | Статус | Чем подтверждено |
 |---|---|---|
 | Спецификация + протоколы (16 схем) | specification_complete | self_test 16/16 |
-| Эталонное ядро + 12 сценариев | integration_tested | behavior_tests 51/51 (после независимого аудита, все 12 замечаний закрыты) |
+| Эталонное ядро + 13 сценариев | integration_tested | behavior_tests 63/63 (после независимого аудита, все 12 замечаний закрыты) |
 | Хук безопасности G1 | verified_local | 123/123 теста; живьём проверен в Claude Code |
 | Скилл-ярлык `/uok` + CLI `uok init` | verified_local; `uok init` — verified_live в Qoder | test_install_skill 7/7, test_uok_cli 29/29; живая цепочка bootstrap → скилл → установка → `/uok <задача>` → диспетчеризация воркера → запреты G1 (SEC-04 запись воркера, SEC-02 чтение .env), Qoder Desktop 2026-11-17 ([отчёт](handoff/INSTALLATION-REPORT-qoder-2026-11-17.md)); полный цикл SEC-07 (ask хука → отказ человека) подтверждён живьём в default-режиме; claims и два параллельных воркера с непересекающимися заявками тоже подтверждены живьём (шаг 16 отчёта); read-only пробник `uok-research-analyst` пройден (шаг 17) — все пункты LIVE-CHECKS a–e закрыты; другие среды — ещё нет |
 | Адаптер Claude Code | integration_tested | живая установка и проверки 1–12 ([отчёт](handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md)) |
@@ -57,7 +57,7 @@ Kit version: 1.0.0 · Spec version: 1.0.0 · Обновлено: 2026-11-17
 ```bash
 cd UNIVERSAL-ORCHESTRATOR-KIT
 python3 validation/self_test.py        # 16 структурных проверок CHK-01…16
-python3 validation/behavior_tests.py   # 51 поведенческая проверка TS-01…12
+python3 validation/behavior_tests.py   # 63 поведенческие проверки TS-01…13
 python3 adapters/shared/hooks/test_g1_guard.py   # 123 теста хука G1
 python3 adapters/shared/test_install_skill.py    # 5 тестов скилла-ярлыка установщиков
 python3 adapters/shared/test_uok_cli.py          # 11 тестов CLI uok (init + bootstrap)

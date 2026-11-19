@@ -3,7 +3,7 @@
 # Consumed by validation/reference_router.py. Policy changes MUST be versioned
 # (policy_version) and MUST NOT weaken approval requirements (SEC-10, QA-04).
 schema_version: 1
-policy_version: 1.0.0
+policy_version: 1.1.0
 
 tiers:
   TIER-1:
@@ -49,6 +49,18 @@ modifiers:
   complexity: { low: 0, medium: 0, high: 1 }
   reasoning: { basic: 0, standard: 0, advanced: 1 }
   failure_impact: { low: 0, medium: 0, high: 1 }
+
+# Graph impact (CG-06, release 1.2.0): formal additive complexity modifier driven
+# by the context graph. Measured by core/graph_signal.py; applied in compute_tier
+# under the SAME modifier_tier_cap. Fail-open: stale/unavailable/absent signal adds 0.
+graph_impact:
+  delta: 1
+  thresholds:
+    god_node_degree: 25       # touched node degree >= this => god node
+    community_spread: 3       # distinct communities in touched + 1-hop impact >= this
+    impact_files: 10          # distinct source files in 1-hop impact >= this
+  on_unavailable: no_bump     # stale | unavailable | no_touched_nodes => delta 0, flagged
+  evidence: [max_degree, community_spread, impact_files, schema_version, graphify_version]
 
 # Escalation from modifiers never pushes a non-specialized task past TIER-3.
 # TIER-4 is reached only via CAT-08 or explicit task.requested_tier.

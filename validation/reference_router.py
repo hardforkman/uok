@@ -114,6 +114,24 @@ def compute_tier(task: dict, policy: dict) -> tuple[str, list[str]]:
         + mods["reasoning"][task.get("reasoning", "standard")]
         + mods["failure_impact"][task.get("failure_impact", "medium")]
     )
+    gi = policy.get("graph_impact")
+    if gi and "graph_signal" in task:
+        sig = task.get("graph_signal") or {}
+        status = sig.get("status", "unavailable")
+        if status == "ok":
+            th = gi["thresholds"]
+            reasons = []
+            if sig.get("max_degree", 0) >= th["god_node_degree"]:
+                reasons.append("god_node")
+            if sig.get("community_spread", 0) >= th["community_spread"]:
+                reasons.append("community_spread")
+            if sig.get("impact_files", 0) >= th["impact_files"]:
+                reasons.append("impact_files")
+            if reasons:
+                delta += gi["delta"]
+                flags.append("graph_impact_applied")
+        elif status in ("stale", "unavailable"):
+            flags.append(f"graph_signal_{status}")
     idx = _tier_idx(base) + delta
     if category == "CAT-08":
         idx = _tier_idx("TIER-4")          # CAT-08 keeps TIER-4 regardless of deltas
@@ -278,7 +296,7 @@ def route(task: dict, policy: dict, models: list, roles: dict,
             "rationale": "no eligible model in tier or escalation path; human escalation required",
             "decision": "human_escalation", "requires_approval": requires_approval,
         }
-    return {
+    decision = {
         "decided_at": task.get("created_at", "unknown"),
         "tier": chosen, "model_id": model["id"], "agent_role": role_id,
         "agent_instance_id": instance_id,
@@ -288,6 +306,11 @@ def route(task: dict, policy: dict, models: list, roles: dict,
                      f"model {model['id']} ranked first among eligible candidates",
         "decision": "route", "requires_approval": requires_approval,
     }
+    if "graph_signal" in task:
+        decision["graph_signal"] = task["graph_signal"]
+        if "graph_impact_applied" in flags:
+            decision["rationale"] += "; graph_impact modifier applied (CG-06)"
+    return decision
 
 
 def plan_fallback(policy: dict, event: str, attempts_used: int,

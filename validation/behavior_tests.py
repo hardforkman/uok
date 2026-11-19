@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavior tests TS-01…TS-12 — execute the reference kernel against the
+"""Behavior tests TS-01…TS-13 — execute the reference kernel against the
 scenario fixtures (validation/fixtures/tasks.yaml) and the shipped policy,
 registry (test_only mock models), and role definitions.
 
@@ -434,6 +434,69 @@ def main():
     _, ccflags = rk.select_execution_environment(cc_profile, {})
     check("TS-12", "doc_only_verification" not in ccflags,
           "live-verified adapter not flagged doc-only")
+
+    # TS-13 — graph-aware routing: graph_impact complexity modifier (CG-06)
+    import importlib.util, os
+    _gs_path = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(rk.__file__)),
+                                             "..", "core", "graph_signal.py"))
+    _spec = importlib.util.spec_from_file_location("graph_signal", _gs_path)
+    gs = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(gs)
+
+    s = fx["TS-13"]
+    d = rk.route(s["task"], policy, models, roles)
+    e = s["expect"]
+    check("TS-13", d["tier"] == e["tier"] and d["model_id"] == e["model_id"]
+          and "graph_impact_applied" in d["flags"],
+          f"god-node signal bumps TIER-2 -> {d['tier']} model={d['model_id']}")
+    check("TS-13", d.get("graph_signal", {}).get("max_degree") == s["task"]["graph_signal"]["max_degree"],
+          "routing decision records the graph_signal metrics as evidence (CG-07)")
+
+    synth = {"graph": {"schema_version": 48, "graphify_version": "0.9.112"},
+             "nodes": [{"id": "A", "source_file": "src/core.py", "community": 0},
+                       {"id": "B", "source_file": "src/util.py", "community": 0},
+                       {"id": "C", "source_file": "src/api.py", "community": 1},
+                       {"id": "D", "source_file": "src/db.py", "community": 2},
+                       {"id": "E", "source_file": "src/ui.py", "community": 1}],
+             "edges": [{"source": "B", "target": "A"}, {"source": "C", "target": "A"},
+                       {"source": "D", "target": "A"}, {"source": "E", "target": "A"},
+                       {"source": "A", "target": "B"}, {"source": "C", "target": "D"}]}
+    sig = gs.compute_signal(synth, ["src/core.py"])
+    check("TS-13", sig["status"] == "ok" and sig["max_degree"] == 5,
+          f"extractor computes touched-node degree from edges (max_degree={sig['max_degree']})")
+    check("TS-13", sig["community_spread"] == 3 and sig["impact_files"] == 5,
+          f"1-hop impact: communities={sig['community_spread']} files={sig['impact_files']}")
+    check("TS-13", gs.compute_signal({"nodes": "broken"}, ["src/core.py"])["status"] == "unavailable"
+          and gs.compute_signal({}, ["x"])["status"] == "unavailable",
+          "malformed graph fails open to unavailable (no bump)")
+    check("TS-13", gs.compute_signal(synth, ["src/missing.py"])["status"] == "no_touched_nodes",
+          "claims matching no indexed node -> no_touched_nodes (no bump)")
+
+    base = dict(s["task"]); base.pop("graph_signal")
+    below = dict(base, graph_signal={"status": "ok", "max_degree": 2, "community_spread": 1, "impact_files": 2})
+    db = rk.route(below, policy, models, roles)
+    check("TS-13", db["tier"] == "TIER-2" and "graph_impact_applied" not in db["flags"],
+          "below all thresholds -> no bump (stays TIER-2)")
+    capped = dict(base, complexity="high",
+                  graph_signal={"status": "ok", "max_degree": 40, "community_spread": 1, "impact_files": 2})
+    dc = rk.route(capped, policy, models, roles)
+    check("TS-13", dc["tier"] == "TIER-3",
+          f"complexity high + graph bump still capped at TIER-3 (got {dc['tier']})")
+    st = rk.route(dict(base, graph_signal={"status": "stale"}), policy, models, roles)
+    check("TS-13", st["tier"] == "TIER-2" and "graph_signal_stale" in st["flags"],
+          "stale signal -> no bump + graph_signal_stale flag (CG-03)")
+    un = rk.route(dict(base, graph_signal={"status": "unavailable"}), policy, models, roles)
+    check("TS-13", un["tier"] == "TIER-2" and "graph_signal_unavailable" in un["flags"],
+          "unavailable signal -> no bump + graph_signal_unavailable flag (fail-open)")
+    rv = rk.route(dict(base, is_review=True, reviews_task_id="T-x",
+                       graph_signal={"status": "ok", "max_degree": 99, "community_spread": 9, "impact_files": 99}),
+                  policy, models, roles)
+    check("TS-13", rv["tier"] == "TIER-5",
+          "review task stays TIER-5; graph_impact never touches the reviewer tier")
+    sec = rk.route(dict(base, category="CAT-07",
+                        graph_signal={"status": "ok", "max_degree": 99, "community_spread": 9, "impact_files": 99}),
+                   policy, models, roles)
+    check("TS-13", sec["tier"] == "TIER-3",
+          f"CAT-07 security floor holds at TIER-3 under graph bump (got {sec['tier']})")
 
     # Report
     print(f"behavior_tests: {len(PASSES)} checks passed, {len(FAILURES)} failed")

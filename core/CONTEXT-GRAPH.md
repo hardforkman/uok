@@ -1,6 +1,6 @@
 # Context Graph (Graphify) — optional kit extension
 
-Kit version: 1.0.0 · Release 1.1.0 (additive extension; the core spec is unchanged).
+Kit version: 1.0.0 · Release 1.2.0 (additive extension; the core spec is unchanged).
 Status: `verified_local` (installer + hook tests). Live skill invocation inside each host:
 `unverified` until the checks below are run and reported.
 
@@ -34,10 +34,14 @@ every edge tagged `EXTRACTED` or `INFERRED`. The kit stays fully functional with
   (marked UOK block, maintained by the installer). Builds are code-only and offline:
   `GRAPHIFY_BACKEND=none`, `--code-only`. No docs/PDF/media semantic pass without explicit
   human approval (it would call an LLM backend).
-- **CG-06 — Routing input (advisory).** Graph metrics (degree, community spread, path length
-  between changed and affected nodes) feed the EXISTING complexity modifiers of
-  `core/ROUTING-POLICY.md`. A change touching a god node or several communities is a
-  complexity signal; this extension adds no new hard floors and changes no tier semantics.
+- **CG-06 — Graph impact modifier (formal).** Graph metrics feed the `graph_impact`
+  complexity modifier in `core/routing-policy.yaml` (policy_version 1.1.0): when the
+  signal is fresh and a touched node is a god node (degree >= god_node_degree) or the
+  1-hop impact crosses >= community_spread communities or >= impact_files files, the tier
+  delta gains +1 — under the SAME TIER-3 modifier cap as other modifiers. No new hard
+  floors; TIER-5 stays review-only. Stale/unavailable signal adds 0 and is flagged
+  (`graph_signal_stale` / `graph_signal_unavailable`); absent signal adds 0 silently.
+  Metrics are computed by `core/graph_signal.py` and recorded in the routing decision.
 - **CG-07 — Honesty and provenance.** `policy/graphify.yaml` records `cli_version`,
   `schema_version`, `nodes`, `built_at`, `verification`. The installer never claims live
   host behaviour it did not observe. Graphify releases frequently (0.9.x): the recorded

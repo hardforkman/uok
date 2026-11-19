@@ -299,14 +299,14 @@ def main() -> int:
     ct = read("validation/COMPATIBILITY-TESTS.md")
     fx = rk.load_yaml("validation/fixtures/tasks.yaml")
     fx_ids = {s["id"] for s in fx["scenarios"]}
-    for i in range(1, 13):
+    for i in range(1, 14):
         tid = f"TS-{i:02d}"
         if tid not in ct:
             problems.append(f"{tid} missing in COMPATIBILITY-TESTS.md")
         if tid not in fx_ids:
             problems.append(f"{tid} missing in fixtures")
     record("CHK-13", not problems, "; ".join(problems) if problems
-           else "AC-01..13 and TS-01..12 fully traceable")
+           else "AC-01..13 and TS-01..13 fully traceable")
 
     # CHK-14 secret scan across all kit text files
     hits = []

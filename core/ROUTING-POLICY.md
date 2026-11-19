@@ -59,6 +59,10 @@ route(task, registry, agents, policy, project):
   3. delta ← modifiers.complexity[task.complexity]
            + modifiers.reasoning[task.reasoning]
            + modifiers.failure_impact[task.failure_impact]
+           + graph_impact.delta when task.graph_signal is fresh (status ok) and a
+             threshold is met (god_node_degree / community_spread / impact_files;
+             CG-06). Stale/unavailable signal adds 0 and is flagged; an absent
+             signal adds 0 silently. Same modifier_tier_cap applies.
   4. tier ← base + delta, capped at policy.modifier_tier_cap (TIER-3).
      Exception: CAT-08 keeps TIER-4; task.is_review ⇒ TIER-5 directly.
   5. tier ← max(tier, policy.tier_floors[task.category])   # hard floors
@@ -142,3 +146,23 @@ direction (QA-04, SEC-10).
 - Every default role exists in [AGENT-CAPABILITIES.yaml](AGENT-CAPABILITIES.yaml).
 - `escalation_path` never contains TIER-5; floors never exceed the cap except
   for CAT-08/TIER-4 and review/TIER-5.
+
+## Graph impact modifier (CG-06, release 1.2.0)
+
+`graph_impact` is a formal additive complexity modifier (policy_version 1.1.0).
+When a task carries a fresh `graph_signal` (status `ok`) and any threshold is met,
+`graph_impact.delta` (+1) joins the modifier sum in step 3 — under the same
+`modifier_tier_cap` (TIER-3) as complexity/reasoning/failure_impact. It adds no new
+hard floor and never reaches TIER-4/TIER-5 (CAT-08 and is_review are unaffected).
+
+Thresholds (`graph_impact.thresholds` in routing-policy.yaml):
+- `god_node_degree` (25): a touched node whose degree >= this is a god node.
+- `community_spread` (3): distinct communities among touched nodes + 1-hop impact.
+- `impact_files` (10): distinct source files in the 1-hop impact set.
+
+Metrics are measured by `core/graph_signal.py` (deterministic, stdlib, offline) from
+`graphify-out/graph.json` and the task's write claims. Fail-open: `stale` or
+`unavailable` signal adds 0 and is flagged; an absent signal adds 0 silently; claims
+matching no indexed node yield `no_touched_nodes` (0). The decision record cites the
+signal metrics and provenance (CG-07). Threshold changes are versioned policy changes
+(policy_version) per QA-04 — never a silent core rewrite.
