@@ -318,6 +318,36 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertNotIn("UPDATED-MARKER", skill.read_text())
 
+    def test_updater_self_repairs_copied_folder(self):
+        """A kit copy without .git (release zip, Finder copy) is repaired automatically."""
+        copied = self.tmp / "copied-kit"
+        shutil.copytree(KIT, copied, ignore=shutil.ignore_patterns("__pycache__", "backups", ".git"))
+        marker = copied / "USER-MARKER.txt"
+        marker.write_text("user edit\n")
+        r = subprocess.run(["bash", str(copied / "updater.sh"), "--no-refresh"], capture_output=True,
+                           text=True, env=dict(self.env, UOK_REPO=str(self.upstream)), timeout=900)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("repairing automatically", r.stdout)
+        self.assertIn("preserved as", r.stdout)
+        self.assertIn("already up to date", r.stdout)   # the fresh clone is at the newest release
+        self.assertTrue((copied / ".git").exists(), "repaired copy must be a git repository")
+        self.assertEqual((copied / "VERSION").read_text().strip(),
+                         (Path(KIT) / "VERSION").read_text().strip())
+        backups = list(self.tmp.glob("copied-kit.backup-*"))
+        self.assertEqual(len(backups), 1, "the old folder must be preserved, never deleted")
+        self.assertEqual((backups[0] / "USER-MARKER.txt").read_text(), "user edit\n")
+        self.assertIn("updater", (copied / "updater.sh").read_text())
+
+    def test_updater_self_repair_restores_folder_on_clone_failure(self):
+        copied = self.tmp / "copied-kit2"
+        shutil.copytree(KIT, copied, ignore=shutil.ignore_patterns("__pycache__", "backups", ".git"))
+        r = subprocess.run(["bash", str(copied / "updater.sh"), "--no-refresh"], capture_output=True,
+                           text=True, env=dict(self.env, UOK_REPO=str(self.tmp / "no-such-repo")), timeout=900)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("the original folder was restored", r.stdout + r.stderr)
+        self.assertTrue(copied.exists() and not (copied / ".git").exists(), "original must be untouched")
+        self.assertFalse(list(self.tmp.glob("copied-kit2.backup-*")), "no backup left behind")
+
     def test_refresh_skips_missing_project(self):
         self.kit_run(["init", "--host", "qoder", "--project", str(self.proj)])
         shutil.rmtree(self.proj)

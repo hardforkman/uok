@@ -15,7 +15,9 @@
 #   1. $UOK_REPO           e.g. UOK_REPO=https://github.com/<owner>/UNIVERSAL-ORCHESTRATOR-KIT.git
 #   2. the kit repo's existing `origin` remote
 # Works wherever the kit lives (cloned into a project, or the shared ~/.uok location):
-# the script updates the copy it sits in.
+# the script updates the copy it sits in. A non-git kit copy (release zip, Finder copy)
+# is repaired automatically: the folder is preserved as <kit>.backup-<ts> and replaced
+# by a fresh clone of the publish repository (UOK_REPO or the canonical default).
 #
 # The kit folder is the single source: projects read core/, protocols/, templates/ from it
 # directly. Each project also holds installed copies (G1 hook, agents, launcher skill,
@@ -43,8 +45,26 @@ note() { echo "updater: $*"; }
 command -v git >/dev/null 2>&1 || die "git is required but not installed"
 
 TOP="$(git -C "$KIT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
-[ -n "$TOP" ] || die "this kit copy is not a git repository (it was copied as a folder). \
-Re-clone it from the GitHub repository instead: git clone <repo-url> UNIVERSAL-ORCHESTRATOR-KIT"
+if [ -z "$TOP" ]; then
+    # Self-repair (kit 1.2.1): this kit copy was unpacked or copied without .git (a release
+    # zip, a Finder copy). No git history can be lost in such a folder, but a user may have
+    # edited files in it - so the whole folder is MOVED ASIDE (never deleted) and replaced
+    # by a fresh clone of the canonical publish repository. Fully reversible by hand.
+    REPAIR_SRC="${UOK_REPO:-https://github.com/hardforkman/uok.git}"
+    REPAIR_TS="$(date +%Y%m%d-%H%M%S)"
+    note "this kit copy is not a git repository (copied as a folder); repairing automatically:"
+    note "  fresh clone from: $REPAIR_SRC"
+    note "  the current folder is preserved as: $KIT_DIR.backup-$REPAIR_TS"
+    mv "$KIT_DIR" "$KIT_DIR.backup-$REPAIR_TS" \
+        || die "could not move the old folder aside; repair manually: git clone <repo-url> <kit-dir>"
+    if ! git clone --quiet "$REPAIR_SRC" "$KIT_DIR"; then
+        mv "$KIT_DIR.backup-$REPAIR_TS" "$KIT_DIR"
+        die "automatic repair failed (network?); the original folder was restored. \
+Repair manually: git clone <repo-url> <kit-dir>"
+    fi
+    TOP="$(git -C "$KIT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+    note "repaired: $KIT_DIR is now a git clone; continue with the update below."
+fi
 [ "$TOP" = "$KIT_DIR" ] || die "the kit folder is inside another git repository ($TOP), \
 so git pull would update that project, not the kit. Update the kit by re-cloning, or keep the \
 kit as its own repository and run this script there."
