@@ -223,11 +223,14 @@ Run Universal Orchestrator Kit orchestration (kit {KIT_VERSION}) in THIS project
 for the **dsh** host (DeepSeek Harness). The kit folder is recorded in
 `~/.uok/location` (read it with `cat ~/.uok/location`).
 
-0. If `.orchestrator/policy/adapter.yaml` is missing in the current project, run the
-   `/uok-init` flow first (dry-run plan, then install; restart the session afterwards).
-1. Read `.orchestrator/policy/adapter.yaml` (kit_version, context_graph, host) and the
-   project's CLAUDE.md / AGENTS.md — the marked UOK rules section is the routing and
-   quality policy for this session.
+0. If the kit is not installed in this project (no adapter settings under
+   `.orchestrator/policy/`), run the `/uok-init` flow first (dry-run plan, then
+   install; restart the session afterwards).
+1. Read the adapter settings — `.orchestrator/policy/adapter.yaml`, or
+   `claude-code.yaml` when the claude-code adapter installed the kit (the G1 guard
+   reads both names) — for kit_version, context_graph and host, plus the project's
+   CLAUDE.md / AGENTS.md: the marked UOK rules section is the routing and quality
+   policy for this session.
 2. Classify the task (`core/TASK-CLASSIFICATION.md`), pick the cheapest sufficient tier
    (`core/routing-policy.yaml`; when `.orchestrator/policy/graphify.yaml` has
    `enabled: true`, the formal graph_impact modifier applies, CG-06), delegate to
