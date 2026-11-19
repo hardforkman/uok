@@ -36,6 +36,19 @@ python3 ~/uok/uok --version          # какой релиз установле�
 
 Номер релиза хранится в файле `VERSION`; заголовок «Kit version» в документах относится к версии спецификации и меняется только вместе с ней.
 
+## Контекстный граф (Graphify, опционально)
+
+Начиная с релиза 1.1.0 кит умеет подключать [Graphify](https://github.com/Graphify-Labs/graphify)
+как общую read-only память проекта: `uok init --graphify install` ставит CLI (`graphifyy` через
+uv/pipx), скилл `/graphify` и строит code-only граф полностью локально и офлайн
+(`GRAPHIFY_BACKEND=none`). Роли ориентируются запросами к графу вместо чтения файлов подряд,
+claims выводятся из подграфа влияния, воркеры не могут перестроить граф (правила CG-01…07 в
+`core/CONTEXT-GRAPH.md`). По умолчанию `--graphify auto`: интеграция включается, только если CLI
+уже на PATH; без него кит работает как раньше и честно помечает `degraded_context_graph`.
+Отказ: `--graphify off`. Обновление CLI — решение человека: `uv tool upgrade graphifyy`, затем
+`python3 ~/uok/uok refresh`. Это community-интеграция, не аффилированная с Graphify Labs
+(Apache-2.0, см. `NOTICE-GRAPHIFY.md`).
+
 ## Что нужно на машине
 
 - Python 3.10 или новее.

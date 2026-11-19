@@ -3,7 +3,7 @@
 
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init [--host auto|claude-code|qoder|cursor|codex]
           [--project DIR] [--mode standard|strict] [--models tier1=..,tier2=..,tier3=..,review=..]
-          [--dry-run]
+          [--graphify auto|install|off] [--dry-run]
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap [--host auto|all|claude-code|qoder|cursor|codex]
           [--dry-run]
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok refresh [--dry-run]
@@ -116,15 +116,15 @@ def save_registry(entries):
         f.write("\n")
 
 
-def record_project(project, host, mode, models):
+def record_project(project, host, mode, models, graphify="auto"):
     entries = [e for e in load_registry() if (e.get("project"), e.get("host")) != (project, host)]
-    entries.append({"project": project, "host": host, "mode": mode, "models": models})
+    entries.append({"project": project, "host": host, "mode": mode, "models": models, "graphify": graphify})
     save_registry(entries)
 
 
-def run_installer(project, host, mode, models, dry_run):
+def run_installer(project, host, mode, models, dry_run, graphify="auto"):
     installer = os.path.join(KIT, "adapters", host, "install.py")
-    cmd = [sys.executable, installer, "--project", project, "--mode", mode]
+    cmd = [sys.executable, installer, "--project", project, "--mode", mode, "--graphify", graphify]
     if models:
         cmd += ["--models", models]
     if dry_run:
@@ -147,9 +147,9 @@ def cmd_init(a):
     print(f"uok init: host={host}, project={project}, kit={KIT}")
     if not a.dry_run:
         write_pointer()
-    rc = run_installer(project, host, a.mode, models, a.dry_run)
+    rc = run_installer(project, host, a.mode, models, a.dry_run, a.graphify)
     if rc == 0 and not a.dry_run:
-        record_project(project, host, a.mode, models)
+        record_project(project, host, a.mode, models, a.graphify)
     return rc
 
 
@@ -166,7 +166,8 @@ def cmd_refresh(a):
             print(f"uok refresh: skipping {project or '?'} ({host or '?'}): project missing or host unknown")
             continue
         print(f"uok refresh: {host} -> {project}")
-        if run_installer(project, host, e.get("mode", "standard"), e.get("models", ""), a.dry_run) != 0:
+        if run_installer(project, host, e.get("mode", "standard"), e.get("models", ""), a.dry_run,
+                         e.get("graphify", "auto")) != 0:
             failed.append(project)
         else:
             done += 1
@@ -187,9 +188,13 @@ path no longer exists, ask the user where the kit lives now and tell them to run
 
 1. Show the plan first (use the session's current project root, quoted):
    `python3 "$(cat ~/.uok/location)/uok" init --host {host} --project "<project root>" --dry-run`
-2. Install: the same command without `--dry-run`. It is additive and idempotent; backups
-   go to `.orchestrator/backups/`. If the user gives real model selectors for this host,
-   pass them with `--models tier1=..,tier2=..,tier3=..,review=..` (defaults are unverified).
+2. Install: the same command without `--dry-run`, plus `--graphify install` to also set up
+   the optional Graphify context graph (fetches the `graphifyy` CLI via uv/pipx if missing -
+   network, user-level, reversible; builds a code-only graph fully offline; opt out with
+   `--graphify off`). It is additive and idempotent; backups go to `.orchestrator/backups/`.
+   If the user gives real model selectors for this host, pass them with
+   `--models tier1=..,tier2=..,tier3=..,review=..` (defaults are unverified).
+   Graphify rules and live checks: the kit's core/CONTEXT-GRAPH.md.
 3. Report the installer's changes and verification output honestly; never claim live
    checks that did not run.
 4. Tell the user to restart the session. Afterwards tasks run through the kit via
@@ -259,6 +264,8 @@ def main():
     pi.add_argument("--project", default=None, help="project root (default: current directory)")
     pi.add_argument("--mode", choices=("standard", "strict"), default="standard")
     pi.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= selectors for the host")
+    pi.add_argument("--graphify", choices=("auto", "install", "off"), default="auto",
+                    help="Graphify context graph: auto=use CLI if on PATH (no network), install=also fetch via uv/pipx, off=skip")
     pi.add_argument("--dry-run", action="store_true")
     pr = sub.add_parser("refresh", help="re-apply the kit to every project recorded by init")
     pr.add_argument("--dry-run", action="store_true")

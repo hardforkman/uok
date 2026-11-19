@@ -40,6 +40,8 @@ ADAPTER = os.path.dirname(os.path.realpath(__file__))
 KIT = os.path.dirname(os.path.dirname(ADAPTER))
 POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
 PAYLOAD = os.path.join(os.path.dirname(ADAPTER), "shared")
+sys.path.insert(0, PAYLOAD)
+import graphify_integration  # noqa: E402  (optional Graphify context graph, CG-01..07)
 KIT_VERSION = "1.0.0"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 AGENT_MARK = "(Universal Orchestrator Kit role)"
@@ -61,9 +63,13 @@ TIER_KEY = {"TIER-1": "tier1", "TIER-2": "tier2", "TIER-3": "tier3", "TIER-4": "
 
 
 class Installer:
-    def __init__(self, project, mode, models, dry_run):
+    def __init__(self, project, mode, models, dry_run, graphify="auto"):
         self.root = os.path.realpath(project)
         self.mode, self.models, self.dry = mode, models, dry_run
+        self.graphify = graphify            # auto | install | off (Graphify context graph)
+        self.context_graph = "none"
+        self.graphify_results = []
+        self.degradations = []
         self.ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.backup_dir = os.path.join(self.root, ".orchestrator", "backups", self.ts)
         self.changes, self.kept, self.warnings = [], [], []
@@ -105,7 +111,7 @@ class Installer:
                     os.makedirs(self.p(".orchestrator", d), exist_ok=True)
 
     def step_hooks(self):
-        for name in ("g1_guard.py", "uok_search.py", "test_g1_guard.py", "README.md"):
+        for name in ("g1_guard.py", "uok_search.py", "test_g1_guard.py", "README.md", "uok_graph.py"):
             src = os.path.join(PAYLOAD, "hooks", name)
             self.write(self.p(".orchestrator", "hooks", name), open(src, encoding="utf-8").read(),
                        "G1 guard payload")
@@ -156,6 +162,10 @@ class Installer:
                           f"`python3 -I {self.root}/.orchestrator/hooks/uok_search.py PATTERN [RELATIVE_DIR]`.\n")
         elif self.mode == "strict":
             shell_rule = "- You have no search tool: work on the file paths given in your task brief.\n"
+        if self.context_graph == "graphify" and perm["shell"] != "none":
+            shell_rule += ("- Context graph: query it read-only with "
+                           f"`python3 -I {self.root}/.orchestrator/hooks/uok_graph.py query|path|explain|section WORDS` "
+                           "(CG-01/04); never rebuild or edit graphify-out/.\n")
         return f"""---
 name: uok-{rid}
 description: "{r['name']} {AGENT_MARK}. Use for: {'; '.join(r['responsibilities'][:2])}."
@@ -231,7 +241,7 @@ If no task text came with the invocation, ask the user for the task before actin
 - **roles**: list the `uok-*` roles with tier and model, then stop (no task run).
 - otherwise: run the full orchestration lifecycle on the whole task text.
 
-Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
+{graphify_integration.skill_paragraph(k)}Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
 1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
    resolve dependencies (no cycles).
 2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
@@ -283,6 +293,7 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
             + (" Strict mode: workers run only exact allowlisted shell commands, read files with Read and search "
                "with `.orchestrator/hooks/uok_search.py`; roles without Bash get the exact file paths in their brief."
                if strict else ""),
+            *([graphify_integration.graph_rule(self)] if self.context_graph == "graphify" else []),
             "- User instructions override kit rules; record deviations in `.orchestrator/audit/`.",
             MARK_END, ""]
         return "\n".join(lines)
@@ -297,6 +308,9 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
         else:
             new = (old.rstrip("\n") + "\n\n" if old.strip() else "") + section
         self.write(path, new if new.endswith("\n") else new + "\n", "marked UOK section")
+
+    def step_graphify(self):
+        graphify_integration.apply(self)   # optional, additive, fail-open (core/CONTEXT-GRAPH.md)
 
     def step_policy(self):
         pol = self.p(".orchestrator", "policy")
@@ -337,6 +351,7 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
                f"enforcement: {self.mode}        # standard | strict\n"
                f"kit_dir: \"{self.kit_rel}\"\n"
                f"kit_version: \"{KIT_VERSION}\"\n"
+               f"context_graph: \"{self.context_graph}\"\n"
                "# Host-owned state dirs (~/.claude/) that main may write despite ISO-02 (the host's\n"
                "# own persistent memory lives outside the project); never applies to uok-* workers.\n"
                "host_state_write_exceptions:\n"
@@ -370,14 +385,14 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
                            env=dict(os.environ, CLAUDE_PROJECT_DIR=self.root))
         ok = '"deny"' in s.stdout
         out.append(f"smoke event (Read .env -> deny): {'PASS' if ok else 'FAIL ' + s.stdout + s.stderr}")
-        return out
+        return out + self.graphify_results
 
     def run(self):
         if not os.path.isdir(self.root):
             sys.exit(f"project directory not found: {self.root}")
         # Order matters: the hook file must exist before settings.json points to it.
-        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.step_agents, self.step_skill,
-                     self.step_claude_md, self.step_ignores, self.step_settings):
+        for step in (self.step_dirs, self.step_hooks, self.step_graphify, self.step_policy, self.step_agents,
+                     self.step_skill, self.step_claude_md, self.step_ignores, self.step_settings):
             step()
         if not self.dry:
             os.makedirs(os.path.dirname(POINTER), exist_ok=True)
@@ -394,6 +409,8 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
             print("kept:"); [print("  - " + k) for k in self.kept]
         if self.warnings:
             print("warnings:"); [print("  - " + w) for w in self.warnings]
+        if self.degradations:
+            print("degradations:"); [print("  - " + d) for d in self.degradations]
         if results:
             print("verification:"); [print("  - " + r) for r in results]
         print("next: restart the Claude Code session (agents load at session start), then fill "
@@ -418,6 +435,8 @@ def main():
     ap.add_argument("--mode", choices=("standard", "strict"), default=None,
                     help="enforcement mode (default: keep the installed one, else standard)")
     ap.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= Claude Code model aliases or IDs")
+    ap.add_argument("--graphify", choices=("auto", "install", "off"), default="auto",
+                    help="Graphify context graph: auto=use CLI if on PATH, install=also fetch via uv/pipx, off=skip")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     project = a.project or os.path.dirname(KIT)
@@ -426,7 +445,7 @@ def main():
         cfg = os.path.join(project, ".orchestrator", "policy", "claude-code.yaml")
         m = re.search(r"enforcement:\s*(\w+)", open(cfg).read()) if os.path.exists(cfg) else None
         mode = m.group(1) if m and m.group(1) in ("standard", "strict") else "standard"
-    sys.exit(Installer(project, mode, parse_models(a.models), a.dry_run).run())
+    sys.exit(Installer(project, mode, parse_models(a.models), a.dry_run, graphify=a.graphify).run())
 
 
 if __name__ == "__main__":

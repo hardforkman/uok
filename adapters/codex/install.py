@@ -34,8 +34,8 @@ class CodexInstaller(core.BaseInstaller):
     HOST, FORMAT, INSTRUCTION_FILE = "codex", "codex", "AGENTS.md"
     SKILL_DIR, SKILL_INVOKE = ".agents/skills/uok", "$uok"
 
-    def __init__(self, *a):
-        super().__init__(*a)
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
         self.degradations += [
             "PreToolUse cannot ask: SEC-07 operations are denied with a 'human must run it' reason",
             "hook input has no subagent identity: worker-only rules are instructions, not hook-enforced",

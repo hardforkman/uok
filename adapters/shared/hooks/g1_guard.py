@@ -160,14 +160,14 @@ def _cfg(key, default):
 STRICT = _cfg("enforcement", "standard").lower() == "strict"
 # Where the kit lives relative to the project root (set by the installer); its code is write-protected.
 KIT_DIR = _cfg("kit_dir", "UNIVERSAL-ORCHESTRATOR-KIT").strip("/").lower()
-PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".agents/", ".git/", ".orchestrator/",
+PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".agents/", ".git/", ".orchestrator/", "graphify-out/",
              "claude.md", "claude.local.md",
              "agents.md", "agents.local.md", ".mcp.json", ".gitignore") \
     + (() if not KIT_DIR or os.path.isabs(KIT_DIR) or KIT_DIR.startswith(("..", "<")) else
        (KIT_DIR + "/validation/", KIT_DIR + "/core/", KIT_DIR + "/adapters/"))
 # File names protected at any depth (nested CLAUDE.md files are loaded as instructions; round 6, item 3).
 PROTECTED_NAMES = ("claude.md", "claude.local.md", "agents.md", "agents.local.md", ".mcp.json", "settings.json",
-                   "settings.local.json", "hooks.json")
+                   "settings.local.json", "hooks.json", ".graphifyrc", ".graphifyignore")
 NO_READ_FOR_UOK = (".orchestrator/audit/", ".orchestrator/claims/", ".git/")
 # Roles whose AGENT-CAPABILITIES permissions say sensitive_ops: approval_required.
 APPROVAL_ROLES = {"uok-senior-engineer", "uok-release-integration"}
@@ -462,9 +462,36 @@ def segments(cmd):
     return [" ".join(x.split()) for x in re.split(r"&&|\|\||;|\||&|\n|\r", cmd) if x.strip()]
 
 
+GRAPHIFY_READ_ONLY = {"query", "path", "explain", "section", "--version", "--help"}
+
+
+def graphify_mutation(cmd):
+    """CG-04: the shared context graph is read-only for uok-* workers. Returns the mutating
+    subcommand (or '(bare graphify)') if any segment invokes graphify outside the read-only set."""
+    for seg in segments(cmd):
+        tokens = seg.split()
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t in KEYWORDS or t in WRAPPERS or ("=" in t and not t.startswith("-")):
+                i += 1
+                if t in WRAPPERS:
+                    while i < len(tokens) and tokens[i].startswith("-"):
+                        i += 1
+                continue
+            break
+        if i < len(tokens) and os.path.basename(tokens[i]) == "graphify":
+            sub = tokens[i + 1] if i + 1 < len(tokens) else ""
+            if sub not in GRAPHIFY_READ_ONLY:
+                return sub or "(bare graphify)"
+    return None
+
+
 def allowlist():
     entries = load_yaml_list(os.path.join(ROOT, ".orchestrator", "policy", "project.yaml"), "shell_allowlist") \
         or SAFE_SHELL_FALLBACK
+    if _cfg("context_graph", "none").lower() == "graphify":   # CG-04: read-only graph queries for workers
+        entries = entries + ["python3 -I {root}/.orchestrator/hooks/uok_graph.py ..."]
     return [a.replace("{root}", REAL_ROOT) for a in entries]   # portable: no machine paths in policy
 
 
@@ -530,6 +557,11 @@ def main():
         cmd = inp.get("command", "")
         if not isinstance(cmd, str):
             raise TypeError("command must be a string")
+        if uok:
+            mut = graphify_mutation(cmd)
+            if mut:
+                decide("deny", f"{agent}: graphify '{mut}' mutates the shared context graph; "
+                               "workers only query it (CG-04/SEC-04)")
         if STRICT and uok and not restricted_chars_ok(cmd):   # before any other parsing (N1)
             decide("deny", f"{agent}: shell expansion/quoting/redirection characters or overlong command "
                            f"not allowed in restricted mode (SEC-04)")

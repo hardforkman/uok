@@ -26,8 +26,8 @@ class CursorInstaller(core.BaseInstaller):
     HOST, FORMAT, INSTRUCTION_FILE = "cursor", "cursor", "AGENTS.md"
     SKILL_DIR, SKILL_INVOKE = ".cursor/skills/uok", "/uok"
 
-    def __init__(self, *a):
-        super().__init__(*a)
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
         self.degradations += [
             "no file-defined subagents: roles are rule-scoped prompts (.cursor/rules/uok-role-*.mdc), run sequentially",
             "hook input has no agent identity: worker-only rules (claims per worker, guard files, role sensitive_ops) "

@@ -19,6 +19,8 @@ except ImportError:
 
 SHARED = os.path.dirname(os.path.realpath(__file__))
 KIT = os.path.dirname(os.path.dirname(SHARED))
+sys.path.insert(0, SHARED)
+import graphify_integration  # noqa: E402  (optional Graphify context graph, CG-01..07)
 # Where the kit lives on this machine. Project files never embed the path: they say `<kit>`,
 # and this file holds the real folder. Moving the kit = run `uok locate` from its new place.
 POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
@@ -83,9 +85,12 @@ class BaseInstaller:
     DEFAULT_MODELS = {"tier1": None, "tier2": None, "tier3": None, "review": None}
     TIER_KEY = {"TIER-1": "tier1", "TIER-2": "tier2", "TIER-3": "tier3", "TIER-4": "tier3", "TIER-5": "review"}
 
-    def __init__(self, project, mode, models, dry_run):
+    def __init__(self, project, mode, models, dry_run, graphify="auto"):
         self.root = os.path.realpath(project)
         self.mode, self.models, self.dry = mode, models, dry_run
+        self.graphify = graphify            # auto | install | off (Graphify context graph)
+        self.context_graph = "none"         # set by step_graphify; written to adapter.yaml
+        self.graphify_results = []          # verification lines appended to verify()
         self.ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.backup_dir = os.path.join(self.root, ".orchestrator", "backups", self.ts)
         self.changes, self.kept, self.warnings, self.degradations = [], [], [], []
@@ -150,9 +155,12 @@ class BaseInstaller:
                     os.makedirs(self.p(".orchestrator", d), exist_ok=True)
 
     def step_hooks(self):
-        for name in ("g1_guard.py", "uok_search.py", "test_g1_guard.py", "README.md"):
+        for name in ("g1_guard.py", "uok_search.py", "test_g1_guard.py", "README.md", "uok_graph.py"):
             self.write(self.p(".orchestrator", "hooks", name),
                        self.read(os.path.join(SHARED, "hooks", name)), "G1 guard payload")
+
+    def step_graphify(self):
+        graphify_integration.apply(self)   # optional, additive, fail-open (core/CONTEXT-GRAPH.md)
 
     def step_policy(self):
         pol = self.p(".orchestrator", "policy")
@@ -195,7 +203,8 @@ class BaseInstaller:
                    f"host: {self.HOST}\n"
                    f"enforcement: {self.mode}        # standard | strict\n"
                    f"kit_dir: \"{self.kit_rel}\"\n"
-                   f"kit_version: \"{KIT_VERSION}\"\n" + exc,
+                   f"kit_version: \"{KIT_VERSION}\"\n"
+                   f"context_graph: \"{self.context_graph}\"\n" + exc,
                    f"adapter settings (host {self.HOST}, enforcement {self.mode})")
 
     def step_ignores(self):
@@ -237,6 +246,7 @@ class BaseInstaller:
             "credential changes, external publication. Never auto-approve.",
             "- No success claim without evidence (command output). Tag unverified claims honestly.",
             f"- The G1 hook (`.orchestrator/hooks/g1_guard.py --format {self.FORMAT}`) {self.hook_line()}",
+            *([graphify_integration.graph_rule(self)] if self.context_graph == "graphify" else []),
             "- User instructions override kit rules; record deviations in `.orchestrator/audit/`.",
             MARK_END, ""])
 
@@ -291,7 +301,7 @@ use the user's accompanying message as the task; if there is none, ask for the t
 - **roles**: list the supported `uok-*` roles with tier and model, then stop (no task run).
 - otherwise: run the full orchestration lifecycle on the whole task text.
 
-Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
+{graphify_integration.skill_paragraph(k)}Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
 1. Analyze and classify the task (`{k}/core/TASK-CLASSIFICATION.md`); decompose if needed;
    resolve dependencies (no cycles).
 2. Route per `{k}/core/ROUTING-POLICY.md` and `.orchestrator/policy/models.yaml`: cheapest
@@ -340,13 +350,13 @@ Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
                            input=json.dumps(ev), capture_output=True, text=True, timeout=30, env=env, cwd=self.root)
         out.append(f"smoke event ({self.FORMAT}: secret file -> deny): "
                    f"{'PASS' if want in s.stdout else 'FAIL ' + s.stdout + s.stderr}")
-        return out
+        return out + self.graphify_results
 
     def run(self):
         if not os.path.isdir(self.root):
             sys.exit(f"project directory not found: {self.root}")
-        for step in (self.step_dirs, self.step_hooks, self.step_policy, self.host_steps, self.step_skill,
-                     self.step_ignores, self.register_hook):   # the hook file exists before the host config points to it
+        for step in (self.step_dirs, self.step_hooks, self.step_graphify, self.step_policy, self.host_steps,
+                     self.step_skill, self.step_ignores, self.register_hook):   # the hook file exists before the host config points to it
             step()
         write_pointer(self.dry)
         results = self.verify()
@@ -377,6 +387,8 @@ def cli(installer_cls, doc):
     ap.add_argument("--project", default=None, help="project root (default: the kit's parent directory)")
     ap.add_argument("--mode", choices=("standard", "strict"), default="standard")
     ap.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= model selectors for this host")
+    ap.add_argument("--graphify", choices=("auto", "install", "off"), default="auto",
+                    help="Graphify context graph: auto=use CLI if on PATH, install=also fetch via uv/pipx, off=skip")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     models = dict(installer_cls.DEFAULT_MODELS)
@@ -385,4 +397,4 @@ def cli(installer_cls, doc):
         if k.strip() not in models or not re.fullmatch(r"[A-Za-z0-9._:\-\[\]]+", v.strip()):
             sys.exit(f"bad --models entry: {part!r}")
         models[k.strip()] = v.strip()
-    sys.exit(installer_cls(a.project or os.path.dirname(KIT), a.mode, models, a.dry_run).run())
+    sys.exit(installer_cls(a.project or os.path.dirname(KIT), a.mode, models, a.dry_run, graphify=a.graphify).run())
