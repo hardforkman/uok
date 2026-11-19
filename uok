@@ -17,6 +17,8 @@ bootstrap One-time per machine: registers a user-level `uok-init` skill so that 
           `uok init` (or /uok-init; Codex: $uok-init) in ANY project session runs init.
           Global skill locations [verified_doc 2026-11-17]: ~/.claude/skills,
           ~/.qoder/skills, ~/.cursor/skills, ~/.agents/skills (see adapter PROFILE.yaml).
+          When ~/.dsh exists (DeepSeek Harness), the uok-init and uok launcher skills are
+          mirrored into ~/.dsh/skills — DSH loads user skills only from there.
           User-authored skills are never overwritten; kit-managed ones are backed up to
           ~/.uok/backups/<timestamp>/ before update.
 
@@ -55,8 +57,10 @@ GLOBAL_SKILL_DIR = {"claude-code": ".claude/skills", "qoder": ".qoder/skills",
 PROJECT_DIR_MARKER = {"claude-code": ".claude", "qoder": ".qoder", "cursor": ".cursor", "codex": ".codex"}
 HOME_MARKER = {"claude-code": ".claude", "qoder": ".qoder", "cursor": ".cursor", "codex": ".codex"}
 ENV_PREFIX = {"claude-code": "CLAUDE", "qoder": "QODER", "cursor": "CURSOR", "codex": "CODEX"}
-INIT_INVOKE = {"claude-code": "/uok-init", "qoder": "/uok-init", "cursor": "/uok-init", "codex": "$uok-init"}
-LAUNCH_INVOKE = {"claude-code": "/uok", "qoder": "/uok", "cursor": "/uok", "codex": "$uok"}
+INIT_INVOKE = {"claude-code": "/uok-init", "qoder": "/uok-init", "cursor": "/uok-init", "codex": "$uok-init",
+               "dsh": "/uok-init"}
+LAUNCH_INVOKE = {"claude-code": "/uok", "qoder": "/uok", "cursor": "/uok", "codex": "$uok",
+                 "dsh": "/uok"}
 
 
 def detect_host(project):
@@ -208,6 +212,69 @@ Do not perform sensitive operations (deploys, credential changes, publication).
 """
 
 
+def dsh_orchestrator_skill_text():
+    """User-level `/uok` launcher for DeepSeek Harness sessions (loaded from ~/.dsh/skills)."""
+    return f"""---
+name: uok
+description: "Launch Universal Orchestrator Kit orchestration in this project {BOOT_MARK}. Use when the user types '/uok <task>' or asks to route or execute a task through the orchestrator kit."
+---
+
+Run Universal Orchestrator Kit orchestration (kit {KIT_VERSION}) in THIS project
+for the **dsh** host (DeepSeek Harness). The kit folder is recorded in
+`~/.uok/location` (read it with `cat ~/.uok/location`).
+
+0. If `.orchestrator/policy/adapter.yaml` is missing in the current project, run the
+   `/uok-init` flow first (dry-run plan, then install; restart the session afterwards).
+1. Read `.orchestrator/policy/adapter.yaml` (kit_version, context_graph, host) and the
+   project's CLAUDE.md / AGENTS.md — the marked UOK rules section is the routing and
+   quality policy for this session.
+2. Classify the task (`core/TASK-CLASSIFICATION.md`), pick the cheapest sufficient tier
+   (`core/routing-policy.yaml`; when `.orchestrator/policy/graphify.yaml` has
+   `enabled: true`, the formal graph_impact modifier applies, CG-06), delegate to
+   `uok-*` role agents using their role prompts (`.claude/agents/uok-*.md` or the
+   adapter's agents dir), and follow `core/EXECUTION-LIFECYCLE.md`.
+3. DSH runs NO PreToolUse G1 hook. Enforce the same boundaries explicitly: before a
+   worker step, check the intended tool call against the kit's G1 logic
+   (`python3 -I "$(cat ~/.uok/location)/adapters/shared/hooks/g1_guard.py" --format claude`
+   with a synthetic event); never let workers write outside the project, into
+   `.orchestrator/`, `.claude/`, or `graphify-out/` (CG-04); secret-bearing paths are
+   always denied (SEC-02); a host approval request for wider access is legitimate —
+   never bypass it.
+4. Report claims only with evidence (command output); tag unverified claims honestly.
+   Workers never rebuild the context graph; stale graph => main session runs
+   `graphify update .` or reports `degraded_context_graph` (CG-03).
+
+Do not perform sensitive operations (deploys, credential changes, publication).
+"""
+
+
+def dsh_skill_texts():
+    """The user-level skills mirrored into ~/.dsh/skills when DSH is present."""
+    return (("uok-init", skill_text("dsh")), ("uok", dsh_orchestrator_skill_text()))
+
+
+def install_global_skill(path, text, backup_dir, changes, kept, warnings, dry):
+    """Shared semantics for every user-level skill install (BOOT_MARK guard + backup)."""
+    old = open(path, encoding="utf-8").read() if os.path.exists(path) else None
+    if old is not None and BOOT_MARK not in old:
+        kept.append(f"{path} (user-authored, not touched)")
+        warnings.append(f"skill name '{os.path.basename(os.path.dirname(path))}' taken by a user skill; not installed")
+        return
+    if old == text:
+        kept.append(f"{path} (unchanged)")
+        return
+    changes.append(f"{'update' if old is not None else 'create'} {path}")
+    if dry:
+        return
+    if old is not None:
+        dst = os.path.join(backup_dir, os.path.basename(os.path.dirname(path)), "SKILL.md")
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(path, dst)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 def cmd_bootstrap(a):
     if not a.dry_run:
         write_pointer()
@@ -223,26 +290,13 @@ def cmd_bootstrap(a):
     backup_dir = os.path.expanduser(f"~/.uok/backups/{ts}")
     changes, kept, warnings = [], [], []
     for host in hosts:
-        path = os.path.expanduser(f"~/{GLOBAL_SKILL_DIR[host]}/uok-init/SKILL.md")
-        text = skill_text(host)
-        old = open(path, encoding="utf-8").read() if os.path.exists(path) else None
-        if old is not None and BOOT_MARK not in old:
-            kept.append(f"{path} (user-authored, not touched)")
-            warnings.append(f"{host}: skill name 'uok-init' taken by a user skill; not installed")
-            continue
-        if old == text:
-            kept.append(f"{path} (unchanged)")
-            continue
-        changes.append(f"{'update' if old is not None else 'create'} {path}")
-        if a.dry_run:
-            continue
-        if old is not None:
-            dst = os.path.join(backup_dir, host, "SKILL.md")
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy2(path, dst)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
+        install_global_skill(os.path.expanduser(f"~/{GLOBAL_SKILL_DIR[host]}/uok-init/SKILL.md"),
+                             skill_text(host), backup_dir, changes, kept, warnings, a.dry_run)
+    dsh_dir = os.path.expanduser("~/.dsh")
+    if os.path.isdir(dsh_dir):   # DeepSeek Harness installed: mirror user-level skills it auto-loads
+        for name, text in dsh_skill_texts():
+            install_global_skill(os.path.join(dsh_dir, "skills", name, "SKILL.md"),
+                                 text, backup_dir, changes, kept, warnings, a.dry_run)
     print(f"uok bootstrap (kit {KIT_VERSION}, {'DRY RUN' if a.dry_run else 'done'}): "
           f"user-level uok-init skill for {', '.join(hosts)}")
     for title, items in (("changes", changes or ["(none)"]), ("kept", kept), ("warnings", warnings)):

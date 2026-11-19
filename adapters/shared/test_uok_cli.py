@@ -137,6 +137,36 @@ class UokCliTest(unittest.TestCase):
         for host in HOSTS:
             self.assertFalse(self.skill_path(host).exists())
 
+    def test_bootstrap_mirrors_dsh_skills(self):
+        (Path(self.home) / ".dsh" / "skills").mkdir(parents=True)   # DSH installed on the machine
+        r = run_uok(["bootstrap", "--host", "all"], self.home, self.proj)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for name in ("uok-init", "uok"):
+            with self.subTest(skill=name):
+                p = Path(self.home, ".dsh/skills", name, "SKILL.md")
+                self.assertTrue(p.exists(), f"{p} missing")
+                fm, body = frontmatter(p.read_text(encoding="utf-8"))
+                self.assertEqual(fm["name"], name)
+                self.assertIn(MARK, fm["description"])
+                self.assertIn("cat ~/.uok/location", body)
+                self.assertNotIn(KIT, body)
+        r2 = run_uok(["bootstrap", "--host", "all"], self.home, self.proj)
+        self.assertEqual(r2.returncode, 0)
+        self.assertEqual(r2.stdout.count("(unchanged)"), 6)   # 4 hosts + 2 dsh skills
+        self.assertIn(".dsh/skills/uok/SKILL.md", r.stdout)
+        # no ~/.dsh -> no mirror lines, hosts-only behaviour unchanged
+        home2 = tempfile.mkdtemp(prefix="uok-cli-home2-")
+        self.addCleanup(shutil.rmtree, home2, ignore_errors=True)
+        r3 = run_uok(["bootstrap", "--host", "all"], home2, self.proj)
+        self.assertEqual(r3.returncode, 0)
+        self.assertNotIn(".dsh", r3.stdout)
+
+    def test_bootstrap_dry_run_writes_nothing(self):
+        r = run_uok(["bootstrap", "--host", "all", "--dry-run"], self.home, self.proj)
+        self.assertEqual(r.returncode, 0)
+        for host in HOSTS:
+            self.assertFalse(self.skill_path(host).exists())
+
     def test_bootstrap_auto_uses_home_markers(self):
         Path(self.home, ".qoder").mkdir()
         r = run_uok(["bootstrap"], self.home, self.proj)
