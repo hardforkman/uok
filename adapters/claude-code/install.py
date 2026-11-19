@@ -42,7 +42,10 @@ POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
 PAYLOAD = os.path.join(os.path.dirname(ADAPTER), "shared")
 sys.path.insert(0, PAYLOAD)
 import graphify_integration  # noqa: E402  (optional Graphify context graph, CG-01..07)
-KIT_VERSION = "1.0.0"
+try:   # single source of truth: the VERSION file (release), not a hardcoded literal
+    KIT_VERSION = open(os.path.join(KIT, "VERSION"), encoding="utf-8").read().strip() or "unknown"
+except OSError:
+    KIT_VERSION = "unknown"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 AGENT_MARK = "(Universal Orchestrator Kit role)"
 SKILL_MARK = "(Universal Orchestrator Kit skill)"

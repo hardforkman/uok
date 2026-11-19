@@ -32,7 +32,10 @@ def write_pointer(dry_run):
     os.makedirs(os.path.dirname(POINTER), exist_ok=True)
     with open(POINTER, "w", encoding="utf-8") as f:
         f.write(KIT + "\n")
-KIT_VERSION = "1.0.0"
+try:   # single source of truth: the VERSION file (release), not a hardcoded literal
+    KIT_VERSION = open(os.path.join(KIT, "VERSION"), encoding="utf-8").read().strip() or "unknown"
+except OSError:
+    KIT_VERSION = "unknown"
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 ROLE_MARK = "(Universal Orchestrator Kit role)"
 SKILL_MARK = "(Universal Orchestrator Kit skill)"
