@@ -165,15 +165,23 @@ class MarkedSectionRepairTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
 
     def corrupted(self, kit_version):
-        """The exact observed shape: user intro, an orphaned END, four accumulated sections."""
+        """The exact observed shape: user intro, an orphaned END, an unmarked boilerplate
+        orphan copy of the kit section (pre-1.2.6 residue found in real projects), four
+        accumulated sections, and a user-authored section under the same heading."""
         def section(ver, junk):
             return (f"<!-- UOK:BEGIN (Universal Orchestrator Kit {ver}, Claude Code adapter, "
                     f"enforcement: standard) -->\n## Universal Orchestrator Kit ({junk})\n"
                     f"old rules line {junk}\n<!-- UOK:END -->\n\n")
+        orphan = ("## Universal Orchestrator Kit\n\nKit: `<kit>` (spec, routing policy).\n\n"
+                  "The main session is the **orchestrator**; workers are the subagents `uok-*`.\n"
+                  "Rules:\n- old orphan rule\n"
+                  "User instructions override kit rules; record deviations in `.orchestrator/audit/`.\n\n")
+        user_own = ("## Universal Orchestrator Kit\n\nMy own notes about orchestration — "
+                    "keep this user text.\n\n")
         return ("# My project\n\nUser intro line.\n\n<!-- UOK:END -->\n\n"
                 + section("1.2.3", "JUNK-123") + section("1.2.4", "JUNK-124-A")
                 + section("1.2.4", "JUNK-124-B") + section("1.2.5", "JUNK-125")
-                + "Trailing user note.\n")
+                + user_own + orphan + "Trailing user note.\n")
 
     def test_claude_md_heals_four_sections_and_orphaned_end(self):
         import importlib.util as iu
@@ -193,6 +201,9 @@ class MarkedSectionRepairTest(unittest.TestCase):
         self.assertIn(mod.KIT_VERSION, text)       # the fresh section is current
         self.assertIn("User intro line.", text)    # user content preserved
         self.assertIn("Trailing user note.", text)
+        self.assertIn("My own notes about orchestration", text)   # user section with the same heading kept
+        self.assertNotIn("old orphan rule", text)                 # the unmarked kit-boilerplate orphan removed
+        self.assertEqual(text.count("## Universal Orchestrator Kit"), 2)  # user's own + the fresh marked one
         # idempotent: a second install on the healed file changes nothing but the section
         healed = text
         inst.step_claude_md()

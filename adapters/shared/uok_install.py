@@ -41,10 +41,11 @@ MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 
 def strip_marked_sections(text):
     """Remove EVERY marked UOK section (each MARK_BEGIN with its nearest following MARK_END)
-    plus stray marker lines, returning clean user text. Robust to accumulated duplicate
-    sections and orphaned markers (the 2026-11-20 CLAUDE.md corruption: 4 duplicate
-    sections + an orphaned END, caused by first-index cutting). A stray BEGIN without an
-    END is NOT cut (no safe range exists) — its marker line is stripped, content kept."""
+    plus stray marker lines, returning clean user text. Also removes UNMARKED orphan copies of
+    the kit section: blocks starting with the kit's '## Universal Orchestrator Kit' heading and
+    containing its boilerplate (residue of the pre-1.2.6 first-index bug, observed in real
+    projects). A user-authored section under the same heading but with different content is kept.
+    A stray MARK_BEGIN without an END is NOT cut (no safe range) — its marker line is stripped."""
     out, i, n = [], 0, len(text)
     while i < n:
         b = text.find(MARK_BEGIN, i)
@@ -58,6 +59,25 @@ def strip_marked_sections(text):
         out.append(text[i:b])
         i = e + len(MARK_END)
     cleaned = "".join(out)
+    # unmarked kit-boilerplate orphans: from the kit heading to its closing boilerplate line
+    # ONLY (never past it — trailing user content after the orphan must survive).
+    lines, kept, k = cleaned.splitlines(), [], 0
+    while k < len(lines):
+        if lines[k].strip() == "## Universal Orchestrator Kit":
+            j, end = k + 1, None
+            while j < len(lines) and j <= k + 40:
+                if lines[j].startswith("User instructions override kit rules"):
+                    end = j
+                    break
+                if lines[j].startswith("## ") or lines[j].startswith("<!-- "):
+                    break
+                j += 1
+            if end is not None and "The main session is the **orchestrator**" in "\n".join(lines[k:end + 1]):
+                k = end + 1   # kit-generated orphan: drop heading..closing line exactly
+                continue
+        kept.append(lines[k])
+        k += 1
+    cleaned = "\n".join(kept)
     lines = [l for l in cleaned.splitlines() if MARK_BEGIN not in l and MARK_END not in l]
     return "\n".join(lines).strip("\n")
 ROLE_MARK = "(Universal Orchestrator Kit role)"
