@@ -28,6 +28,9 @@ supported host, in minutes.
   audited to `.orchestrator/audit/g1.log`.
 - **Honest verification**: no success claim without command output. Every capability carries
   an explicit status — `verified_doc` / `verified_local` / `verified_live` / `unverified`.
+- **Per-project statistics**: `uok stats` (or `--json`) reports what the kit actually did in
+  a project — every G1 decision by cause, context-graph size and freshness, ledgers — and
+  states plainly what is not measured. No invented benefit numbers.
 - **Parallel workers with disjoint write claims**, independent review for high-impact work,
   human approval for production deploys and publication.
 - **Optional context graph**: with [Graphify](https://github.com/Graphify-Labs/graphify)

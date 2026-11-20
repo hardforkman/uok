@@ -66,7 +66,9 @@ def compute_signal(graph, write_globs, stale=False):
     if stale:
         return {"status": "stale", **zero}
     nodes = [n for n in graph["nodes"] if isinstance(n, dict)]
-    edges = [e for e in graph.get("edges", []) if isinstance(e, dict)]
+    # Real Graphify graph.json uses networkx-style "links"; the reference kernel and the
+    # synthetic test graphs use "edges". Accept both so the signal works on real graphs.
+    edges = [e for e in (graph.get("edges") or graph.get("links") or []) if isinstance(e, dict)]
     by_id = {n.get("id"): n for n in nodes if n.get("id") is not None}
     deg = {}
     for e in edges:

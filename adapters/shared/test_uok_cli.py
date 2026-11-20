@@ -7,6 +7,7 @@ invocation inside a host.
 
 Run: python3 adapters/shared/test_uok_cli.py   (exit 0 = all pass)
 """
+import json
 import os
 import shutil
 import subprocess
@@ -174,6 +175,63 @@ class UokCliTest(unittest.TestCase):
         self.assertTrue(self.skill_path("qoder").exists())
         for host in ("claude-code", "cursor", "codex"):
             self.assertFalse(self.skill_path(host).exists())
+
+
+class StatsTest(unittest.TestCase):
+    """`uok stats`: honest per-project statistics derived from what the kit recorded."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="uok-stats-home-")
+        self.proj = Path(tempfile.mkdtemp(prefix="uok-stats-proj-"))
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.addCleanup(shutil.rmtree, str(self.proj), True)
+
+    def env(self, extra=None):
+        e = {k: v for k, v in os.environ.items()
+             if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
+        e.update(HOME=self.home, PYTHONDONTWRITEBYTECODE="1", UOK_PROJECT_DIR=str(self.proj))
+        if extra:
+            e.update(extra)
+        return e
+
+    def stats(self, *args):
+        return subprocess.run([sys.executable, UOK, "stats", "--project", str(self.proj), *args],
+                              capture_output=True, text=True, env=self.env(),
+                              cwd=str(self.proj), timeout=120)
+
+    def test_stats_requires_an_installed_project(self):
+        r = self.stats()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no UOK installation found", r.stdout + r.stderr)
+
+    def test_stats_reports_g1_evidence_and_honest_gaps(self):
+        r = run_uok(["init", "--host", "claude-code", "--project", str(self.proj)], self.home, self.proj)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # generate one real G1 decision (a denied secret read), exactly like the installer's smoke event
+        event = json.dumps({"tool_name": "Read", "tool_input": {"file_path": str(self.proj / ".env")}})
+        g = subprocess.run([sys.executable, "-I", str(self.proj / ".orchestrator/hooks/g1_guard.py"),
+                            "--format", "claude-code"], input=event, capture_output=True, text=True,
+                           env=self.env(), cwd=str(self.proj), timeout=60)
+        self.assertIn('"deny"', g.stdout)
+        r = self.stats()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"uok stats — {os.path.realpath(str(self.proj))}", r.stdout)
+        self.assertIn("host claude-code", r.stdout)          # derived from claude-code.yaml filename
+        self.assertRegex(r.stdout, r"\d+ deny")             # installer smoke event + our probe >= 1
+        self.assertIn("secret-path reads blocked (SEC-02)", r.stdout)
+        self.assertIn("not enabled", r.stdout)               # graphify off in this test project
+        self.assertIn("routing decisions recorded: 0", r.stdout)
+        self.assertIn("Not measured (honesty)", r.stdout)
+        self.assertIn("graph-query usage", r.stdout)
+        j = self.stats("--json")
+        self.assertEqual(j.returncode, 0, j.stdout + j.stderr)
+        d = json.loads(j.stdout)
+        self.assertGreaterEqual(d["safety"]["deny"], 1)
+        self.assertGreaterEqual(d["safety"]["secret_paths"], 1)
+        self.assertEqual(d["kit"]["host"], "claude-code")
+        self.assertFalse(d["context_graph"]["enabled"])
+        self.assertEqual(d["orchestration"]["routing_records"], 0)
+        self.assertEqual(len(d["not_measured"]), 2)
 
 
 class SharedKitRelocationTest(unittest.TestCase):

@@ -7,12 +7,16 @@
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap [--host auto|all|claude-code|qoder|cursor|codex]
           [--dry-run]
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok refresh [--dry-run]
+  python3 UNIVERSAL-ORCHESTRATOR-KIT/uok stats [--project DIR] [--json]
 
 init      Primary installation: dispatches to adapters/<host>/install.py (additive,
           idempotent, backups). --project defaults to the current directory.
 refresh   Re-applies the kit to every project recorded by `init` (~/.uok/projects.json),
           with the mode and models each project was installed with. `updater.sh` calls it
           after a successful update, so projects follow the single kit folder.
+stats     Per-project statistics derived only from what the kit actually recorded: G1
+          safety decisions (audit log), context-graph state and freshness, ledgers, the
+          project registry. Honest about what is not measured (CG-07). Offline, stdlib.
 bootstrap One-time per machine: registers a user-level `uok-init` skill so that typing
           `uok init` (or /uok-init; Codex: $uok-init) in ANY project session runs init.
           Global skill locations [verified_doc 2026-11-17]: ~/.claude/skills,
@@ -29,8 +33,10 @@ PyYAML (used by the adapter installers).
 """
 import argparse
 import datetime
+import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -315,6 +321,201 @@ def cmd_bootstrap(a):
     return 0
 
 
+def _scalar(path, key):
+    """`key: value` from a simple policy yaml (no PyYAML dependency, same trick as g1_guard)."""
+    try:
+        for line in open(path, encoding="utf-8"):
+            if line.lstrip().startswith("#") or ":" not in line:
+                continue
+            k, _, v = line.partition(":")
+            if k.strip() == key:
+                return v.split("#")[0].strip().strip('"')
+    except OSError:
+        pass
+    return None
+
+
+def _g1_stats(project):
+    """Honest counters from the G1 hook audit log (fail-open on any error)."""
+    s = {"log": "absent", "decisions": 0, "allow": 0, "deny": 0, "ask": 0, "fail_open": 0,
+         "secret_paths": 0, "outside_root": 0, "guard_controls": 0, "claims": 0,
+         "secret_payloads": 0, "shell_denied": 0, "approval_asks": 0, "approval_fallbacks": 0,
+         "other_denies": 0, "worker_roles": 0, "worker_decisions": 0, "first": None, "last": None}
+    path = os.path.join(project, ".orchestrator", "audit", "g1.log")
+    if not os.path.isfile(path):
+        return s
+    s["log"] = "present"
+    roles, rx = set(), re.compile(r"^(\S+)\s+(allow|deny|ask|fail-open):\s+\[(.*?)\]\s*(.*)$")
+    try:
+        for line in open(path, encoding="utf-8", errors="replace"):
+            m = rx.match(line.strip())
+            if not m:
+                continue
+            ts, dec, who, rest = m.groups()
+            s["decisions"] += 1
+            if dec == "fail-open":
+                s["fail_open"] += 1
+                continue
+            s[dec] += 1
+            s["first"] = s["first"] or ts
+            s["last"] = ts
+            parts = who.split()
+            agent = parts[0] if parts else "?"
+            if agent.startswith("uok-"):
+                s["worker_decisions"] += 1
+                roles.add(agent)
+            if dec == "deny":
+                if "SEC-02" in rest:
+                    s["secret_paths"] += 1
+                elif "ISO-02" in rest:
+                    s["outside_root"] += 1
+                elif "LC-04" in rest:
+                    s["claims"] += 1
+                elif "SEC-03" in rest:
+                    s["secret_payloads"] += 1
+                elif "SEC-07" in rest:
+                    s["approval_fallbacks"] += 1   # host cannot ask: denied with "the human must run it"
+                elif "shell_allowlist" in rest:
+                    s["shell_denied"] += 1
+                elif "SEC-04" in rest:
+                    s["guard_controls"] += 1
+                else:
+                    s["other_denies"] += 1
+            elif dec == "ask" and "SEC-07" in rest:
+                s["approval_asks"] += 1
+    except OSError:
+        pass
+    s["worker_roles"] = len(roles)
+    return s
+
+
+def _graph_stats(project):
+    """Context-graph state from policy + graph.json (fail-open; one extractor for CG-03/CG-07)."""
+    out = {"enabled": False}
+    pol = os.path.join(project, ".orchestrator", "policy", "graphify.yaml")
+    if os.path.isfile(pol):
+        out["enabled"] = str(_scalar(pol, "enabled")).lower() == "true"
+        for k in ("cli_version", "schema_version", "built_at", "verification", "mode", "nodes"):
+            out[k] = _scalar(pol, k)
+    gpath = os.path.join(project, "graphify-out", "graph.json")
+    if out["enabled"] and os.path.isfile(gpath):
+        spec = importlib.util.spec_from_file_location("graph_signal", os.path.join(KIT, "core", "graph_signal.py"))
+        gs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gs)
+        g = gs.load_graph(gpath)
+        if g and isinstance(g.get("nodes"), list):
+            nodes = g["nodes"]
+            out["nodes"] = len(nodes)
+            out["edges"] = len(g.get("links") or g.get("edges") or []) + len(g.get("hyperedges") or [])
+            files = []
+            for n in nodes[:3000]:
+                f = gs._node_file(n) if isinstance(n, dict) else None
+                if f:
+                    files.append(f if os.path.isabs(f) else os.path.join(project, f))
+            if files:
+                out["fresh"] = "yes" if not gs.is_stale(gpath, files) else "no"
+    return out
+
+
+def _ledger_counts(project):
+    orch = os.path.join(project, ".orchestrator")
+    def count(sub, pred):
+        d = os.path.join(orch, sub)
+        return len([f for f in os.listdir(d) if pred(f)]) if os.path.isdir(d) else 0
+    claims = os.path.join(orch, "claims", "active.json")
+    active = 0
+    if os.path.isfile(claims):
+        try:
+            active = len(json.load(open(claims, encoding="utf-8")).get("claims", []))
+        except (OSError, ValueError):
+            active = 0
+    return {"routing_records": count("routing", lambda f: True),
+            "task_ledger_entries": count("tasks", lambda f: True),
+            "audit_notes": count("audit", lambda f: f.endswith(".md")),
+            "active_claims": active}
+
+
+def cmd_stats(a):
+    """Per-project statistics, derived only from what the kit actually recorded."""
+    project = os.path.realpath(a.project or os.getcwd())
+    orch = os.path.join(project, ".orchestrator")
+    if not os.path.isdir(orch):
+        print(f"uok: no UOK installation found in {project} — run `uok init` there first")
+        return 1
+    adapter = next((os.path.join(orch, "policy", n) for n in ("adapter.yaml", "claude-code.yaml")
+                    if os.path.isfile(os.path.join(orch, "policy", n))), None)
+    kit = {"release": release_version()}
+    for k in ("host", "enforcement", "kit_version", "context_graph"):
+        kit[k] = _scalar(adapter, k) if adapter else None
+    if kit["host"] is None and adapter:   # claude-code.yaml carries no host key: the filename is the host
+        kit["host"] = os.path.splitext(os.path.basename(adapter))[0] if adapter.endswith("claude-code.yaml") else None
+    safety, graph, ledger = _g1_stats(project), _graph_stats(project), _ledger_counts(project)
+    try:
+        registry = json.load(open(os.path.expanduser("~/.uok/projects.json"), encoding="utf-8"))["projects"]
+    except (OSError, ValueError, KeyError):
+        registry = []
+    report = {
+        "project": project, "kit": kit, "safety": safety, "context_graph": graph,
+        "orchestration": ledger, "registry_projects": len(registry),
+        "not_measured": [
+            "graph-query usage: the graphify CLI keeps no query log (the CG-04 wrapper disables it)",
+            "token/time savings vs a no-kit baseline: needs an A/B run, see USAGE-GUIDE.md §7",
+        ],
+    }
+    if a.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    span = ""
+    if safety["first"]:
+        span = f" since {safety['first'][:10]}" + (f", last {safety['last'][:19]}" if safety["last"] else "")
+    g = graph
+    print(f"uok stats — {project}")
+    print(f"  kit {kit['release']} · host {kit['host']} · enforcement {kit['enforcement']}")
+    print()
+    print("Safety — the G1 hook audit log (.orchestrator/audit/g1.log)")
+    if safety["log"] == "absent":
+        print("  no decisions recorded yet (the hook logs every allow/deny/ask once the host runs it)")
+    else:
+        print(f"  {safety['decisions']} decisions{span}: "
+              f"{safety['allow']} allow · {safety['deny']} deny · {safety['ask']} ask"
+              + (f" · {safety['fail_open']} fail-open" if safety["fail_open"] else ""))
+        causes = []
+        if safety["secret_paths"]: causes.append(f"{safety['secret_paths']} secret-path reads blocked (SEC-02)")
+        if safety["secret_payloads"]: causes.append(f"{safety['secret_payloads']} secret-like payloads blocked (SEC-03)")
+        if safety["outside_root"]: causes.append(f"{safety['outside_root']} reads/writes outside the project (ISO-02)")
+        if safety["guard_controls"]: causes.append(f"{safety['guard_controls']} guard-control violations stopped (SEC-04)")
+        if safety["shell_denied"]: causes.append(f"{safety['shell_denied']} non-allowlisted shell commands (SEC-04)")
+        if safety["claims"]: causes.append(f"{safety['claims']} claim violations (LC-04)")
+        print("  denies by cause: " + ("; ".join(causes) if causes else "none")
+              + (f" · {safety['other_denies']} other" if safety["other_denies"] else ""))
+        print(f"  approvals requested (SEC-07): {safety['approval_asks']}"
+              + (f" · {safety['approval_fallbacks']} denied with 'the human must run it' (host cannot ask)" if safety["approval_fallbacks"] else ""))
+        print(f"  worker activity: {safety['worker_roles']} uok-* roles seen · {safety['worker_decisions']} worker decisions")
+    print()
+    print("Context graph (Graphify, community integration)")
+    if g.get("enabled") and g.get("nodes") is not None:
+        print(f"  enabled: true · cli {g.get('cli_version', '?')} · {g['nodes']} nodes"
+              + (f" · {g.get('edges', '?')} edges" if g.get("edges") is not None else "")
+              + f" · schema {g.get('schema_version', '?')}")
+        print(f"  built_at: {g.get('built_at', '?')} · verification: {g.get('verification', '?')} · mode: {g.get('mode', '?')}")
+        if "fresh" in g:
+            print(f"  freshness (CG-03): {'fresh' if g['fresh'] == 'yes' else 'STALE — run `graphify update .` before relying on claims'}")
+    else:
+        print("  not enabled (or not built) — the kit works without it (fail-open, degraded_context_graph)")
+    print()
+    print("Orchestration ledger")
+    print(f"  routing decisions recorded: {ledger['routing_records']}"
+          + (" (live sessions route per ROUTING-POLICY.md; nothing persisted yet)" if not ledger["routing_records"] else ""))
+    print(f"  task ledger entries: {ledger['task_ledger_entries']} · audit notes: {ledger['audit_notes']}"
+          f" · active claims: {ledger['active_claims']}")
+    print(f"  registry: {report['registry_projects']} project(s) recorded in ~/.uok/projects.json")
+    print()
+    print("Not measured (honesty):")
+    for line in report["not_measured"]:
+        print(f"  - {line}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="uok", description=__doc__.strip().splitlines()[0])
     ap.add_argument("--version", action="version", version=f"uok release {release_version()} (kit spec {KIT_VERSION})")
@@ -329,6 +530,9 @@ def main():
     pi.add_argument("--dry-run", action="store_true")
     pr = sub.add_parser("refresh", help="re-apply the kit to every project recorded by init")
     pr.add_argument("--dry-run", action="store_true")
+    pst = sub.add_parser("stats", help="per-project statistics: G1 safety, context graph, ledgers")
+    pst.add_argument("--project", default=None, help="project root (default: current directory)")
+    pst.add_argument("--json", action="store_true", help="machine-readable JSON instead of text")
     sub.add_parser("locate", help="record this kit folder in ~/.uok/location (run after moving the kit)")
     pb = sub.add_parser("bootstrap", help="register the user-level uok-init skill (once per machine)")
     pb.add_argument("--host", choices=("auto", "all") + HOSTS, default="auto")
@@ -336,6 +540,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "locate":
         sys.exit(cmd_locate(a))
+    if a.cmd == "stats":
+        sys.exit(cmd_stats(a))
     if a.cmd == "refresh":
         sys.exit(cmd_refresh(a))
     sys.exit(cmd_init(a) if a.cmd == "init" else cmd_bootstrap(a))

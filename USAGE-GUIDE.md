@@ -366,3 +366,26 @@ installation report. Every degradation decision is recorded explicitly.
 | Live checks for Qoder/Cursor/Codex | [handoff/LIVE-CHECKS.md](handoff/LIVE-CHECKS.md) |
 | Human review of the G1 hook | [handoff/HUMAN-REVIEW-G1.md](handoff/HUMAN-REVIEW-G1.md) |
 | The author's final report | [handoff/INSTALLATION-REPORT-2026-11-16.md](handoff/INSTALLATION-REPORT-2026-11-16.md) |
+
+### 6.9 Statistics (`uok stats`)
+
+What the kit actually did in this project — derived only from recorded
+artifacts, never estimated:
+
+```bash
+python3 "$(cat ~/.uok/location)/uok" stats            # this project, human-readable
+python3 "$(cat ~/.uok/location)/uok" stats --json    # the same numbers for tooling
+```
+
+- **Safety** — every allow/deny/ask the G1 hook decided, from
+  `.orchestrator/audit/g1.log`: secret reads blocked (SEC-02), secret-like
+  payloads blocked (SEC-03), reads/writes outside the project (ISO-02),
+  guard-control violations (SEC-04), claim violations (LC-04), approvals that
+  waited for a human (SEC-07), and how many `uok-*` worker roles ran.
+- **Context graph** — enabled state, CLI version, nodes and edges, build time
+  and CG-03 freshness (a stale graph is reported loudly, not silently used).
+- **Orchestration ledger** — routing records, task ledger entries, audit
+  notes, active claims, and the project registry.
+- **Not measured** — stated explicitly: graph-query usage (the CLI keeps no
+  query log) and token/time savings versus a no-kit baseline (that needs an
+  A/B run). The command never invents a benefit number (CG-07).
