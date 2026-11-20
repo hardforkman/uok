@@ -432,7 +432,8 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         self.assertFalse(list(self.tmp.glob("copied-kit2.backup-*")), "no backup left behind")
 
     def test_refresh_skips_missing_project(self):
-        self.kit_run(["init", "--host", "qoder", "--project", str(self.proj)])
+        r = self.kit_run(["init", "--host", "qoder", "--project", str(self.proj)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)   # a silent init failure here produced a confusing flake
         shutil.rmtree(self.proj)
         r = self.kit_run(["refresh"]) if self.proj.exists() else subprocess.run(
             [sys.executable, str(self.kit / "uok"), "refresh"], capture_output=True, text=True,
