@@ -412,6 +412,28 @@ class G1GuardTest(unittest.TestCase):
         self.assertDecision(self.run_event_full("Bash", {"command": 'grep "a*b" notes.txt'},
                             "uok-test-engineer"), "deny", "SEC-04")
 
+    def test_json_depth_exceeds_iterative(self):
+        """Unit: the iterative depth walker. Python >= 3.13 parses deeply nested JSON
+        without RecursionError, so the guard must enforce MAX_JSON_DEPTH itself; the
+        walker must never recurse (immune to the interpreter recursion limit)."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("g1_guard_depth", HOOK)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        limit = mod.MAX_JSON_DEPTH
+        self.assertFalse(mod._json_depth_exceeds({"a": [[{"b": "x"}]], "c": [1, 2, 3]}))
+        at_limit = ["x"]
+        for _ in range(limit - 2):
+            at_limit = [at_limit]          # leaf lands exactly at depth `limit`: allowed
+        self.assertFalse(mod._json_depth_exceeds(at_limit))
+        over_limit = [at_limit]            # one level deeper: rejected
+        self.assertTrue(mod._json_depth_exceeds(over_limit))
+        deep_dict = cur = {}
+        for _ in range(limit + 1):
+            cur["a"] = {}
+            cur = cur["a"]
+        self.assertTrue(mod._json_depth_exceeds(deep_dict))
+
     def test_deep_nested_mcp_fails_closed(self):
         deep = "[" * 5000 + '"x"' + "]" * 5000
         stdin = '{"tool_name": "mcp__srv__tool", "tool_input": {"a": ' + deep + '}}'

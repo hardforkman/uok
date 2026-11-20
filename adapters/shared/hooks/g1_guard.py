@@ -186,6 +186,26 @@ def restricted_chars_ok(cmd):
 CTX = {"agent": "main", "tool": ""}
 
 
+MAX_JSON_DEPTH = 1000   # keep the 500-level uok-MCP contract (SEC-04) intact below this
+
+
+def _json_depth_exceeds(obj, limit=MAX_JSON_DEPTH):
+    """True when the parsed event nests deeper than `limit`. Iterative on purpose:
+    Python >= 3.13 parses deeply nested JSON without RecursionError, so the old
+    fail-closed branch never fired there and a bomb payload sailed through as allow.
+    The explicit stack keeps this walker itself immune to any recursion limit."""
+    stack = [(obj, 1)]
+    while stack:
+        cur, d = stack.pop()
+        if d > limit:
+            return True
+        if isinstance(cur, dict):
+            stack.extend((v, d + 1) for v in cur.values())
+        elif isinstance(cur, list):
+            stack.extend((v, d + 1) for v in cur)
+    return False
+
+
 def log(msg):
     try:
         os.makedirs(os.path.dirname(AUDIT), exist_ok=True)
@@ -520,6 +540,9 @@ def main():
     except Exception as e:
         log(f"fail-open: bad input {e}")
         return
+    if _json_depth_exceeds(ev):   # Python >= 3.13 parses deep JSON without RecursionError
+        CTX["tool"] = "?"
+        decide("deny", "hook input nested too deeply; failing closed (SEC-03)")
     if not isinstance(ev, dict):
         log("fail-open: event is not a JSON object")
         return
