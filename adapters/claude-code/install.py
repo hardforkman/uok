@@ -49,6 +49,29 @@ except OSError:
 MARK_BEGIN, MARK_END = "<!-- UOK:BEGIN", "<!-- UOK:END -->"
 AGENT_MARK = "(Universal Orchestrator Kit role)"
 SKILL_MARK = "(Universal Orchestrator Kit skill)"
+
+
+def strip_marked_sections(text):
+    """Remove EVERY marked UOK section (each MARK_BEGIN with its nearest following MARK_END)
+    plus stray marker lines, returning clean user text. Robust to accumulated duplicate
+    sections and orphaned markers (the 2026-11-20 CLAUDE.md corruption: 4 duplicate
+    sections + an orphaned END, caused by first-index cutting). A stray BEGIN without an
+    END is NOT cut (no safe range exists) — its marker line is stripped, content kept."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        b = text.find(MARK_BEGIN, i)
+        if b == -1:
+            out.append(text[i:])
+            break
+        e = text.find(MARK_END, b)
+        if e == -1:
+            out.append(text[i:])
+            break
+        out.append(text[i:b])
+        i = e + len(MARK_END)
+    cleaned = "".join(out)
+    lines = [l for l in cleaned.splitlines() if MARK_BEGIN not in l and MARK_END not in l]
+    return "\n".join(lines).strip("\n")
 HOOK_CMD = 'python3 -I "$CLAUDE_PROJECT_DIR/.orchestrator/hooks/g1_guard.py"'
 HOOK_MATCHER = "Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*"
 SECRET_NAMES = [".env", ".env.*", "*credentials*", "*secret*", "*.pem", "*.key", "*.p12", "*.pfx",
@@ -311,12 +334,9 @@ If no task text came with the invocation, ask the user for the task before actin
         path = self.p("CLAUDE.md")
         old = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
         section = self.claude_section()
-        if MARK_BEGIN in old and MARK_END in old:
-            i, j = old.index(MARK_BEGIN), old.index(MARK_END) + len(MARK_END)
-            new = old[:i] + section.rstrip("\n") + old[j:]
-        else:
-            new = (old.rstrip("\n") + "\n\n" if old.strip() else "") + section
-        self.write(path, new if new.endswith("\n") else new + "\n", "marked UOK section")
+        body = strip_marked_sections(old)   # heal accumulated sections + orphaned markers
+        new = (body + "\n\n" if body else "") + section.rstrip("\n") + "\n"
+        self.write(path, new, "marked UOK section")
 
     def step_graphify(self):
         graphify_integration.apply(self)   # optional, additive, fail-open (core/CONTEXT-GRAPH.md)

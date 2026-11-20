@@ -155,5 +155,70 @@ class SkillStepTest(unittest.TestCase):
         self.assertEqual(mod.parse_models("review=opus")["review"], "opus")
 
 
+class MarkedSectionRepairTest(unittest.TestCase):
+    """Regression for the 2026-11-20 CLAUDE.md corruption: repeated installs accumulated
+    duplicate UOK sections (first-index cutting) and left an orphaned END marker. The
+    installers must heal any such state into exactly one fresh section, keeping user text."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="uok-mark-repair-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def corrupted(self, kit_version):
+        """The exact observed shape: user intro, an orphaned END, four accumulated sections."""
+        def section(ver, junk):
+            return (f"<!-- UOK:BEGIN (Universal Orchestrator Kit {ver}, Claude Code adapter, "
+                    f"enforcement: standard) -->\n## Universal Orchestrator Kit ({junk})\n"
+                    f"old rules line {junk}\n<!-- UOK:END -->\n\n")
+        return ("# My project\n\nUser intro line.\n\n<!-- UOK:END -->\n\n"
+                + section("1.2.3", "JUNK-123") + section("1.2.4", "JUNK-124-A")
+                + section("1.2.4", "JUNK-124-B") + section("1.2.5", "JUNK-125")
+                + "Trailing user note.\n")
+
+    def test_claude_md_heals_four_sections_and_orphaned_end(self):
+        import importlib.util as iu
+        spec = iu.spec_from_file_location("cc_repair", os.path.join(ADAPTERS, "claude-code", "install.py"))
+        mod = iu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        path = os.path.join(self.root, "CLAUDE.md")
+        open(path, "w", encoding="utf-8").write(self.corrupted(mod.KIT_VERSION))
+        models = mod.parse_models("")
+        inst = mod.Installer(self.root, "standard", models, False)
+        inst.step_claude_md()
+        text = open(path, encoding="utf-8").read()
+        self.assertEqual(text.count(mod.MARK_BEGIN), 1)
+        self.assertEqual(text.count(mod.MARK_END), 1)
+        for junk in ("JUNK-123", "JUNK-124-A", "JUNK-124-B", "JUNK-125"):
+            self.assertNotIn(junk, text)          # every stale section removed
+        self.assertIn(mod.KIT_VERSION, text)       # the fresh section is current
+        self.assertIn("User intro line.", text)    # user content preserved
+        self.assertIn("Trailing user note.", text)
+        # idempotent: a second install on the healed file changes nothing but the section
+        healed = text
+        inst.step_claude_md()
+        self.assertEqual(open(path, encoding="utf-8").read(), healed)
+
+    def test_agents_md_heals_four_sections_and_orphaned_end(self):
+        cls, models = load_installer("qoder")
+        path = os.path.join(self.root, "AGENTS.md")
+        sec = ("<!-- UOK:BEGIN (Universal Orchestrator Kit {v}, qoder adapter, "
+               "enforcement: standard) -->\n## Universal Orchestrator Kit ({j})\n"
+               "old rules {j}\n<!-- UOK:END -->\n\n")
+        open(path, "w", encoding="utf-8").write(
+            "# Project rules\n\nUser line.\n\n<!-- UOK:END -->\n\n"
+            + sec.format(v="1.2.3", j="QJUNK-123") + sec.format(v="1.2.4", j="QJUNK-124-A")
+            + sec.format(v="1.2.4", j="QJUNK-124-B") + sec.format(v="1.2.5", j="QJUNK-125")
+            + "User tail.\n")
+        inst = cls(self.root, "standard", models, False)
+        inst.step_instruction_file()
+        text = open(path, encoding="utf-8").read()
+        self.assertEqual(text.count("<!-- UOK:BEGIN"), 1)
+        self.assertEqual(text.count("<!-- UOK:END -->"), 1)
+        for junk in ("QJUNK-123", "QJUNK-124-A", "QJUNK-124-B", "QJUNK-125"):
+            self.assertNotIn(junk, text)
+        self.assertIn("User line.", text)
+        self.assertIn("User tail.", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
