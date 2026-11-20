@@ -83,7 +83,7 @@ class SkillStepTest(unittest.TestCase):
         text = Path(self.root, HOSTS["claude-code"][0]).read_text(encoding="utf-8")
         fm, body = frontmatter(text)
         self.assertIs(fm.get("disable-model-invocation"), True)
-        self.assertEqual(fm.get("argument-hint"), "[role|all|roles] [task]")
+        self.assertEqual(fm.get("argument-hint"), "[role|all|roles|stats] [task]")
         self.assertIn("$ARGUMENTS", body)
 
     def test_idempotent_rerun(self):

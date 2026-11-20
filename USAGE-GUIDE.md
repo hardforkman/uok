@@ -220,6 +220,7 @@ reports this. After installation, restart the session.
 | `<role>` (e.g. `/uok research-analyst …`) | Launches **only that role**, `uok-<role>`, with the task text; kit rules (claims, the G1 hook, approvals, evidence) still apply, no decomposition into subtasks. Roles: `architect`, `senior-engineer`, `implementation-engineer`, `research-analyst`, `debugging-specialist`, `test-engineer`, `security-reviewer`, `code-reviewer`, `documentation-specialist`, `release-integration` |
 | `all` (e.g. `/uok all <task>`) | **All roles at once**: the orchestrator verifies that every `uok-*` role is registered, prints the roster with tiers and models, and runs the task through the full cycle with the full roster |
 | `roles` | Just the list of roles with tiers and models; no task is started |
+| `stats` (aliases `stat`, `statistics`) | A built-in report in the chat, no workers dispatched: the agent runs `uok stats` for this project and presents the G1 safety numbers, the context-graph state and freshness, the ledger counts, and the honest "not measured" lines — see §6.9 |
 | anything else | The full orchestration cycle over the entire task text |
 
 **Reviewer model.** The reviewer tier (TIER-5) always gets the strongest model
@@ -367,10 +368,12 @@ installation report. Every degradation decision is recorded explicitly.
 | Human review of the G1 hook | [handoff/HUMAN-REVIEW-G1.md](handoff/HUMAN-REVIEW-G1.md) |
 | The author's final report | [handoff/INSTALLATION-REPORT-2026-11-16.md](handoff/INSTALLATION-REPORT-2026-11-16.md) |
 
-### 6.9 Statistics (`uok stats`)
+### 6.9 Statistics (`/uok stats` or `uok stats`)
 
 What the kit actually did in this project — derived only from recorded
-artifacts, never estimated:
+artifacts, never estimated. The human-friendly path is the chat: invoke
+`/uok stats` (aliases `stat`, `statistics`) and the agent runs the command
+and presents a clean report in the conversation; no terminal needed.
 
 ```bash
 python3 "$(cat ~/.uok/location)/uok" stats            # this project, human-readable

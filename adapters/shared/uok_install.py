@@ -302,6 +302,12 @@ use the user's accompanying message as the task; if there is none, ask for the t
   (agent files/rules loaded), list the roster with tier and model, then run the rest of the
   task text through the full lifecycle with the complete roster.
 - **roles**: list the supported `uok-*` roles with tier and model, then stop (no task run).
+- **stats** (aliases `stat`, `statistics`): a built-in report, not a worker task — run
+  `python3 "$(cat ~/.uok/location)/uok" stats --project "<project root>"` and present the
+  result in the chat as a clean, readable report: the G1 safety numbers (decisions, denies
+  by cause, approvals that waited for a human), the context-graph state and freshness, the
+  ledger counts, and the "not measured" lines verbatim. Do not dispatch roles for this;
+  do not paste raw command output or JSON unless the user asks.
 - otherwise: run the full orchestration lifecycle on the whole task text.
 
 {graphify_integration.skill_paragraph(k)}Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):

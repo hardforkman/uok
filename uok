@@ -242,6 +242,13 @@ for the **dsh** host (DeepSeek Harness). The kit folder is recorded in
    `enabled: true`, the formal graph_impact modifier applies, CG-06), delegate to
    `uok-*` role agents using their role prompts (`.claude/agents/uok-*.md` or the
    adapter's agents dir), and follow `core/EXECUTION-LIFECYCLE.md`.
+   Built-in exception — if the task text starts with `stats` (aliases `stat`,
+   `statistics`): run `python3 "$(cat ~/.uok/location)/uok" stats --project "<project
+   root>"` and present the result in the chat as a clean, readable report — the G1
+   safety numbers (decisions, denies by cause, approvals that waited for a human), the
+   context-graph state and freshness, the ledger counts, and the "not measured" lines
+   verbatim. Do not dispatch workers for this; do not paste raw command output or JSON
+   unless the user asks.
 3. DSH runs NO PreToolUse G1 hook. Enforce the same boundaries explicitly: before a
    worker step, check the intended tool call against the kit's G1 logic
    (`python3 -I "$(cat ~/.uok/location)/adapters/shared/hooks/g1_guard.py" --format claude`

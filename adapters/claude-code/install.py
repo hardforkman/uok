@@ -220,7 +220,7 @@ Tier hint: {r['default_tier']}. Permissions: filesystem={perm['filesystem']}, sh
         text = f"""---
 name: uok
 description: "Run a task through the Universal Orchestrator Kit {SKILL_MARK}: classify, route to uok-* roles, enforce claims/approvals/review, report with evidence. Use when the user invokes /uok with an engineering task."
-argument-hint: "[role|all|roles] [task]"
+argument-hint: "[role|all|roles|stats] [task]"
 disable-model-invocation: true
 ---
 
@@ -242,6 +242,12 @@ If no task text came with the invocation, ask the user for the task before actin
   present and list the roster with tier and model, then run the rest of the task text through
   the full lifecycle with the complete roster.
 - **roles**: list the `uok-*` roles with tier and model, then stop (no task run).
+- **stats** (aliases `stat`, `statistics`): a built-in report, not a worker task — run
+  `python3 "$(cat ~/.uok/location)/uok" stats --project "<project root>"` and present the
+  result in the chat as a clean, readable report: the G1 safety numbers (decisions, denies
+  by cause, approvals that waited for a human), the context-graph state and freshness, the
+  ledger counts, and the "not measured" lines verbatim. Do not dispatch agents for this;
+  do not paste raw command output or JSON unless the user asks.
 - otherwise: run the full orchestration lifecycle on the whole task text.
 
 {graphify_integration.skill_paragraph(k)}Run the kit lifecycle (`{k}/core/EXECUTION-LIFECYCLE.md`):
