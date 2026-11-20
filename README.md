@@ -1,67 +1,103 @@
 # Universal Orchestrator Kit
 
-Kit version: 1.0.0
+[![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](#) [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Комплект для оркестрации ИИ-агентов: роли, маршрутизация, проверки безопасности и подтверждения человеком. Работает в Claude Code, Qoder, Cursor и Codex.
+Kit version: 1.0.0 (spec lineage) — the release number lives in [`VERSION`](VERSION) and on the [Releases](https://github.com/hardforkman/uok/releases) page.
 
-## Первый запуск
+A governance and safety layer for AI coding agents: **roles, evidence-based routing, a
+PreToolUse security hook, and human approval gates** — installed into any project, on any
+supported host, in minutes.
 
-1. Склонируйте кит один раз на машину в любую общую папку (все проекты и все среды используют её): `git clone https://github.com/hardforkman/uok.git ~/uok`. Название папки не важно; проекты хранят не путь, а метку `<kit>`, а реальный путь записан в `~/.uok/location`. Поддерживается и вариант «кит внутри проекта»: клонируйте в корень проекта.
-2. Откройте сессию агента в этом проекте (Claude Code, Qoder, Cursor или Codex).
-3. Напишите агенту одну фразу:
+> **Graphify is the memory and the map; the Universal Orchestrator Kit is the governance and
+> the safety.** They compose: the optional Graphify integration gives every role a
+> read-only map of the codebase, while the kit decides who works, at what tier, with which
+> checks, and what stays forbidden.
 
-> Прочитай `~/uok/START-HERE.md` и установи комплект в этот проект, как там написано.
+## What you get
 
-Агент сам определит, в какой среде работает (Claude Code, Qoder, Cursor, Codex или другая), выберет подходящий установщик, запустит его, выполнит пробный прогон и проверки и напишет, что сделано и что не проверено. Каждый установщик пишет настройки в тот yaml, который читает хук его среды (`claude-code.yaml` для Claude Code, `adapter.yaml` для остальных).
+- **11 worker roles** (`uok-*`) with one-line launch: `/uok <task>` (Claude Code, Qoder,
+  Cursor, DSH) or `$uok <task>` (Codex). Single role: `/uok research-analyst <task>`; all
+  roles: `/uok all <task>`; roster: `/uok roles`.
+- **Cost-aware routing**: every task is classified (`core/TASK-CLASSIFICATION.md`) into
+  CAT-01…08 and routed to the cheapest sufficient tier TIER-1…TIER-5
+  (`core/routing-policy.yaml`). No silent escalation; review is TIER-5 and never a
+  escalation target.
+- **The G1 hook** (PreToolUse): blocks secret files, writes outside the project, worker
+  writes into `.orchestrator/`, `.claude/` and the kit itself; asks a human before
+  sensitive operations (force-push, deploys, credential changes). Fail-closed for workers,
+  audited to `.orchestrator/audit/g1.log`.
+- **Honest verification**: no success claim without command output. Every capability carries
+  an explicit status — `verified_doc` / `verified_local` / `verified_live` / `unverified`.
+- **Parallel workers with disjoint write claims**, independent review for high-impact work,
+  human approval for production deploys and publication.
+- **Optional context graph**: with [Graphify](https://github.com/Graphify-Labs/graphify)
+  installed, roles orient by querying a code-only graph instead of reading files one by one;
+  claims are derived from the impact subgraph. Fully offline (`GRAPHIFY_BACKEND=none`),
+  fail-open, and community-built — **not affiliated with or endorsed by Graphify Labs**
+  (Apache-2.0, see [`NOTICE-GRAPHIFY.md`](NOTICE-GRAPHIFY.md); rules CG-01…07 in
+  [`core/CONTEXT-GRAPH.md`](core/CONTEXT-GRAPH.md)).
 
-4. Перезапустите сессию. Агенты-роли загружаются только при старте сессии.
+## Quick start
 
-Дальше задачи запускаются так: `/uok <задача>` (Claude Code, Qoder, Cursor) или `$uok <задача>` (Codex). Конкретная роль: `/uok research-analyst <задача>`; все роли разом: `/uok all <задача>`; список ролей: `/uok roles`.
-
-## Обновление
-
+```bash
+git clone https://github.com/hardforkman/uok.git ~/uok
+python3 ~/uok/uok bootstrap          # registers the /uok-init skill for every host found
 ```
-bash ~/uok/updater.sh --check        # что придёт, без изменений
-bash ~/uok/updater.sh                # обновить до последнего РЕЛИЗА (тег vX.Y.Z) + обновить все проекты
-bash ~/uok/updater.sh --edge         # следить за веткой main (ещё не выпущенные изменения)
-bash ~/uok/updater.sh --no-refresh   # обновить только папку кита
-python3 ~/uok/uok --version          # какой релиз установлен
+
+Then, in any project, open an agent session and type one phrase:
+
+> Read `~/uok/START-HERE.md` and install the kit into this project as described there.
+
+or directly: `uok init` (the `/uok-init` skill), which plans with `--dry-run` first, then
+installs. Restart the session afterwards — role agents load at session start. That's it:
+launch work with `/uok <task>`.
+
+Requirements: Python 3.10+, PyYAML (`pip install pyyaml`). Hosts: Claude Code, Qoder,
+Cursor, Codex (per-project installers), and DeepSeek Harness (user-level skills; DSH runs no
+PreToolUse hook, so the kit's boundaries are enforced by its rules and the host's approval
+flow — the launcher skill spells this out honestly).
+
+## Updating
+
+```bash
+bash ~/uok/updater.sh --check        # what would come, changes nothing
+bash ~/uok/updater.sh                # update to the latest RELEASE (tag vX.Y.Z) + refresh all projects
+bash ~/uok/updater.sh --edge         # follow the main branch (unreleased work)
+bash ~/uok/updater.sh --no-refresh   # update the kit folder only
+python3 ~/uok/uok --version          # which release is installed
 ```
 
-По умолчанию берутся только релизы, потому что обновление переписывает хук безопасности G1, агентов и политику во всех проектах. Незавершённая работа в `main` до пользователей не доходит. Релизы смотрите на странице Releases репозитория; откатиться можно командой `git -C ~/uok checkout vX.Y.Z` с последующим `python3 ~/uok/uok refresh`.
+Releases are the default on purpose: an update rewrites the G1 hook, role agents and policy
+in every recorded project, so only deliberately released versions reach them. The update is
+fast-forward only and never clobbers local edits; a kit copy that is not a git repository
+(release zip, folder copy) is repaired automatically — the old folder is preserved as
+`<kit>.backup-<timestamp>` and replaced by a fresh clone. Projects are re-applied from the
+registry (`~/.uok/projects.json`) with their original mode and models; user files are never
+touched, backups go to `.orchestrator/backups/`.
 
-Обновляется единая папка кита; `core/`, `protocols/`, `templates/` проекты читают из неё напрямую. В каждом проекте есть ещё установленные копии (хук G1, агенты, скилл `/uok`, политика). Поэтому после успешного обновления скрипт запускает `uok refresh`: он заново применяет кит ко всем проектам, которые записал `uok init` (список в `~/.uok/projects.json`), с теми же режимом и моделями, что были при установке. Файлы пользователя не трогаются, бэкапы пишутся в `.orchestrator/backups/`. После обновления перезапустите сессии агентов.
+## How it is verified
 
-Работает, если кит клонирован как отдельный репозиторий (адрес берётся из `origin` или из `UOK_REPO=<url>`). Обновление только fast-forward: локальные правки кита не затираются, при незакоммиченных изменениях или расхождении истории скрипт останавливается. Проекты, установленные до этой версии, один раз выполните `uok init` заново, чтобы они попали в список.
+The kit ships its own validation: `validation/self_test.py` (16 structural checks),
+`validation/behavior_tests.py` (63 behavior checks incl. the graph-aware routing scenario
+TS-13), `adapters/shared/hooks/test_g1_guard.py` (128 hook tests),
+`adapters/shared/test_install_skill.py`, `adapters/shared/test_uok_cli.py` and
+`adapters/shared/test_graphify_integration.py` — all six run before every release.
+Live checks per host are documented in `handoff/LIVE-CHECKS.md` and recorded in
+`handoff/INSTALLATION-REPORT-*.md`; the G1 hook additionally requires a recorded human
+review (`handoff/HUMAN-REVIEW-G1.md`).
 
-Номер релиза хранится в файле `VERSION`; заголовок «Kit version» в документах относится к версии спецификации и меняется только вместе с ней.
+## Documentation
 
-## Контекстный граф (Graphify, опционально)
+- [`USAGE-GUIDE.md`](USAGE-GUIDE.md) — the practical guide (English); Russian edition:
+  [`USAGE-GUIDE-RU.md`](USAGE-GUIDE-RU.md).
+- [`START-HERE.md`](START-HERE.md) — first-run entry point and adapter status table.
+- [`UNIVERSAL-ORCHESTRATION-SPEC.md`](UNIVERSAL-ORCHESTRATION-SPEC.md) — the normative spec
+  (requirement IDs ARCH/RT/ISO/SEC/QA/PROT/ADP/CFG/LC).
+- [`AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md`](AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md) — the
+  step-by-step agent directive.
+- [`adapters/`](adapters/) — per-host installers and documentation.
+- [`handoff/`](handoff/) — verification reports, live checks, human review.
 
-Начиная с релиза 1.1.0 кит умеет подключать [Graphify](https://github.com/Graphify-Labs/graphify)
-как общую read-only память проекта: `uok init --graphify install` ставит CLI (`graphifyy` через
-uv/pipx), скилл `/graphify` и строит code-only граф полностью локально и офлайн
-(`GRAPHIFY_BACKEND=none`). Роли ориентируются запросами к графу вместо чтения файлов подряд,
-claims выводятся из подграфа влияния, воркеры не могут перестроить граф (правила CG-01…07 в
-`core/CONTEXT-GRAPH.md`). По умолчанию `--graphify auto`: интеграция включается, только если CLI
-уже на PATH; без него кит работает как раньше и честно помечает `degraded_context_graph`.
-Отказ: `--graphify off`. Обновление CLI — решение человека: `uv tool upgrade graphifyy`, затем
-`python3 ~/uok/uok refresh`. Это community-интеграция, не аффилированная с Graphify Labs
-(Apache-2.0, см. `NOTICE-GRAPHIFY.md`).
+## License
 
-## Что нужно на машине
-
-- Python 3.10 или новее.
-- PyYAML: `pip install pyyaml`.
-
-## Где что написано
-
-- `START-HERE.md` — с чего начинать и таблица статуса адаптеров.
-- `USAGE-GUIDE-RU.md` — подробное руководство на русском.
-- `AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md` — пошаговая инструкция для агента.
-- `adapters/` — установщики и описания сред.
-- `handoff/` — отчёты о проверках и шаблон отчёта.
-
-## Лицензия
-
-MIT, см. файл `LICENSE` (c) 2026 hardforkman.
+MIT — see [`LICENSE`](LICENSE) (c) 2026 hardforkman.

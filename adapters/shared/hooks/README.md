@@ -1,147 +1,147 @@
-# G1 guard — общий хук для всех сред
+# G1 guard — the shared hook for all hosts
 
-Kit version: 1.0.0 · Используется адаптерами Claude Code, Qoder, Cursor, Codex · Файлы: `g1_guard.py` (хук), `uok_search.py` (безопасный поиск для агентов), `test_g1_guard.py` (тесты).
+Kit version: 1.0.0 · Used by the Claude Code, Qoder, Cursor, and Codex adapters · Files: `g1_guard.py` (the hook), `uok_search.py` (safe search for agents), `test_g1_guard.py` (tests).
 
-Устанавливается установщиком адаптера: `python3 <kit>/adapters/<среда>/install.py` (см. README адаптера). Описание соответствует текущему коду.
+Installed by the adapter's installer: `python3 <kit>/adapters/<host>/install.py` (see the adapter's README). This description matches the current code.
 
-## 0. Режимы (`.orchestrator/policy/claude-code.yaml`, ключ `enforcement`)
+## 0. Modes (`.orchestrator/policy/claude-code.yaml`, key `enforcement`)
 
-- **`standard`** (по умолчанию). Для всех: защита секретов, запрет записи вне проекта, проверка секретов в записи и MCP, подтверждение человека для опасных операций (раздел 5). Для исполнителей `uok-*` дополнительно: запрет записи в управляющие файлы, заявки на запись, запрет опасных операций ролям с `sensitive_ops: never`. Обычные инструменты (Bash, Grep, Glob, MCP) исполнителям доступны.
-- **`strict`**. Всё из `standard`, плюс песочница для `uok-*` из раздела 4 и строгие пункты раздела 3: только точные shell-команды, без Grep/Glob/MCP, без чтения вне проекта, только ASCII-пути, блокировка при любой ошибке хука. Включать, когда исполнителям нельзя доверять код или данные проекта.
+- **`standard`** (default). For all callers: secret protection, no writes outside the project, secret checks on writes and MCP calls, human confirmation for dangerous operations (section 5). For `uok-*` workers additionally: writes to control files denied, write claims enforced, dangerous operations denied to roles with `sensitive_ops: never`. Ordinary tools (Bash, Grep, Glob, MCP) are available to workers.
+- **`strict`**. Everything in `standard`, plus the `uok-*` sandbox from section 4 and the strict items of section 3: exact shell commands only, no Grep/Glob/MCP, no reads outside the project, ASCII paths only, blocking on any hook error. Enable it when workers cannot be trusted with the project's code or data.
 
-Файл с настройками защищён от записи исполнителями. Если его нет, действует `standard`. Живые проверки и шесть раундов ревью безопасности зафиксированы в `UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`.
+The settings file is protected against writes by workers. If it is missing, `standard` applies. Live verification and six rounds of security review are recorded in `UNIVERSAL-ORCHESTRATOR-KIT/handoff/INSTALLATION-REPORT-claude-code-2026-11-17.md`.
 
-## 0а. Среды (`--format`)
+## 0a. Hosts (`--format`)
 
-| Среда | Формат | Где регистрируется | Чем отличается |
+| Host | Format | Where registered | Differences |
 |---|---|---|---|
-| Claude Code | `claude` (по умолчанию) | `.claude/settings.json`, PreToolUse | эталон; `agent_type` отличает исполнителей `uok-*` |
-| Qoder | `qoder` | `.qoder/settings.json`, PreToolUse | та же схема, что у Claude Code, включая `agent_type` и `ask` |
-| Cursor | `cursor` | `.cursor/hooks.json`: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | ответ `{"permission": …}`, хук всегда отвечает явно (в том числе `allow`); `ask` становится `deny` с причиной «человек должен выполнить сам»: документация обещает запрос человеку, но живьём (Cursor 3.27.22, 2026-11-17) команда исполнилась без запроса — fail-closed; `beforeReadFile` срабатывает только для существующих файлов; нет идентичности агента |
-| Codex | `codex` | `.codex/hooks.json`, PreToolUse | правки приходят как `apply_patch`: хук извлекает пути и добавленный текст; `ask` не поддерживается, поэтому становится `deny` с причиной «человек должен выполнить сам»; нет идентичности агента |
+| Claude Code | `claude` (default) | `.claude/settings.json`, PreToolUse | the reference; `agent_type` distinguishes `uok-*` workers |
+| Qoder | `qoder` | `.qoder/settings.json`, PreToolUse | the same scheme as Claude Code, including `agent_type` and `ask` |
+| Cursor | `cursor` | `.cursor/hooks.json`: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | response `{"permission": …}`, the hook always answers explicitly (including `allow`); `ask` becomes `deny` with the reason "the human must run it": the documentation promises a human prompt, but live (Cursor 3.27.22, 2026-11-17) the command executed with no prompt — fail-closed; `beforeReadFile` fires only for existing files; no agent identity |
+| Codex | `codex` | `.codex/hooks.json`, PreToolUse | edits arrive as `apply_patch`: the hook extracts paths and added text; `ask` is not supported, so it becomes `deny` with the reason "the human must run it"; no agent identity |
 
-Корень проекта хук берёт из `UOK_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `QODER_PROJECT_DIR` / `CURSOR_PROJECT_DIR`, иначе по своему расположению (`<корень>/.orchestrator/hooks/`), иначе из рабочего каталога. Команда в конфигурации Qoder, Cursor и Codex ищет хук через `git rev-parse --show-toplevel`, поэтому работает из любой подпапки.
+The hook takes the project root from `UOK_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `QODER_PROJECT_DIR` / `CURSOR_PROJECT_DIR`, else from its own location (`<root>/.orchestrator/hooks/`), else from the working directory. The hook command in the Qoder, Cursor, and Codex configurations locates the hook via `git rev-parse --show-toplevel`, so it works from any subfolder.
 
-В средах без идентичности агента (Cursor, Codex) правила для исполнителей (защита управляющих файлов от исполнителей, заявки по исполнителю, запрет опасных операций по роли, режим strict) действуют только как инструкции. Базовые защиты действуют для всех.
+In hosts without agent identity (Cursor, Codex), the worker rules (protecting control files from workers, per-worker claims, denial of dangerous operations by role, strict mode) apply only as instructions. The baseline protections apply to everyone.
 
-Настройки режима хук читает из `.orchestrator/policy/adapter.yaml` (Qoder, Cursor, Codex) или `claude-code.yaml` (Claude Code).
+The hook reads mode settings from `.orchestrator/policy/adapter.yaml` (Qoder, Cursor, Codex) or `claude-code.yaml` (Claude Code).
 
-## 1. Подключение (Claude Code)
+## 1. Registration (Claude Code)
 
-`.claude/settings.json`, событие `PreToolUse`:
+`.claude/settings.json`, event `PreToolUse`:
 
 - matcher: `Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*`
-- команда: `python3 -I "$CLAUDE_PROJECT_DIR/.orchestrator/hooks/g1_guard.py"`, `timeout: 30`
+- command: `python3 -I "$CLAUDE_PROJECT_DIR/.orchestrator/hooks/g1_guard.py"`, `timeout: 30`
 
-Хук никогда не возвращает `allow` явно. Если проверки пройдены, он молча выходит с кодом 0, и решение остаётся за правилами `permissions` в `settings.json` и режимом сессии. `deny` блокирует вызов, `ask` показывает запрос человеку.
+The hook never returns `allow` explicitly. When all checks pass, it exits silently with code 0, and the decision is left to the `permissions` rules in `settings.json` and the session mode. `deny` blocks the call; `ask` shows a human prompt.
 
-Кто вызывает, хук определяет по полю `agent_type` события. Если поле есть и начинается с `uok-`, это подагент-исполнитель, иначе основная сессия (оркестратор под присмотром человека). Для `uok-*` хук работает как песочница, для основной сессии он проверяет секреты, запись вне корня и опасные операции.
+The hook identifies the caller by the event's `agent_type` field. If the field is present and starts with `uok-`, the caller is a worker subagent; otherwise it is the main session (the orchestrator, supervised by a human). For `uok-*` the hook acts as a sandbox; for the main session it checks secrets, writes outside the root, and dangerous operations.
 
-## 2. Проверки для всех вызывающих
+## 2. Checks for all callers
 
-| Проверка | Решение | Требование |
+| Check | Decision | Requirement |
 |---|---|---|
-| Поле пути длиннее 4096 символов, больше 256 `/` или с управляющим символом | deny (до любой обработки пути) | SEC-04 |
-| Компонент пути (как написан или после разрешения симлинков) совпадает с `DENIED_GLOBS`: `.env`, `.env.*`, `*credentials*`, `*secret*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `.ssh`, `.aws`, `.gnupg`, `.kube`, `.netrc`, `.npmrc`, `.pypirc`, `.docker`, `hosts.yml` | deny | SEC-02 |
-| Запись (Write/Edit/MultiEdit/NotebookEdit) вне корня проекта; исключение для main — пути из `host_state_write_exceptions` (см. ниже), для `uok-*` исключений нет | deny | ISO-02 |
-| Похожий на секрет текст в любой строке полей `content`, `new_string`, `new_source`, `edits` | deny | SEC-03 |
-| Похожий на секрет текст в любой строке, ключе или паре `ключ=значение` входа MCP-вызова | deny | SEC-03 |
-| Запись в путь, занятый заявкой другого исполнителя | deny | LC-04 |
-| Опасная shell-операция (раздел 5) | ask | SEC-07 |
-| Bash-команда длиннее 20 000 символов | ask | SEC-07 |
+| A path field longer than 4096 characters, with more than 256 `/`, or containing a control character | deny (before any path processing) | SEC-04 |
+| A path component (as written or after symlink resolution) matches `DENIED_GLOBS`: `.env`, `.env.*`, `*credentials*`, `*secret*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `.ssh`, `.aws`, `.gnupg`, `.kube`, `.netrc`, `.npmrc`, `.pypirc`, `.docker`, `hosts.yml` | deny | SEC-02 |
+| A write (Write/Edit/MultiEdit/NotebookEdit) outside the project root; exception for main — paths from `host_state_write_exceptions` (see below); no exceptions for `uok-*` | deny | ISO-02 |
+| Secret-like text in any line of the `content`, `new_string`, `new_source`, `edits` fields | deny | SEC-03 |
+| Secret-like text in any line, key, or `key=value` pair of an MCP call input | deny | SEC-03 |
+| A write to a path held by another worker's claim | deny | LC-04 |
+| A dangerous shell operation (section 5) | ask | SEC-07 |
+| A Bash command longer than 20,000 characters | ask | SEC-07 |
 
-Проверяются все поля пути, которые есть во входе: `file_path`, `notebook_path`, `path`.
+Every path field present in the input is checked: `file_path`, `notebook_path`, `path`.
 
-Пути сравниваются по написанию на диске. `canonical()` переписывает каждый существующий компонент в то имя, под которым он записан в каталоге (по `st_dev`/`st_ino`). Поэтому `.ORCHESTRATOR/…` или `.orcheſtrator/…` (U+017F) распознаются как `.orchestrator/…`: APFS сворачивает регистр и Unicode.
+Paths are compared by their on-disk spelling. `canonical()` rewrites each existing component to the name under which it is recorded in the directory (by `st_dev`/`st_ino`). Therefore `.ORCHESTRATOR/…` or `.orcheſtrator/…` (U+017F) is recognized as `.orchestrator/…`: APFS folds case and Unicode.
 
-Шаблоны секретов: `sk-…` (16+), `AKIA…`, `gh[pousr]_…` (36+), `-----BEGIN … PRIVATE KEY-----`, а также `api_key|token|password|secret` + `:`/`=` + 20+ символов из `[A-Za-z0-9_-]`.
+Secret patterns: `sk-…` (16+), `AKIA…`, `gh[pousr]_…` (36+), `-----BEGIN … PRIVATE KEY-----`, and `api_key|token|password|secret` + `:`/`=` + 20+ characters from `[A-Za-z0-9_-]`.
 
-**Исключение ISO-02 (`host_state_write_exceptions`).** Собственное постоянное состояние хоста (память агента, настройки) лежит вне корня проекта, и без исключения память хоста перестаёт работать при активном хуке. Список каталогов (записи вида `~/.claude/`, разворачиваются через `expanduser`) читается из `adapter.yaml` (Qoder, Cursor, Codex) или `claude-code.yaml` (Claude Code); инсталлятор вписывает каталог своего хоста. Действует только для main (не `uok-*`); SEC-02 проверяется раньше, поэтому секретные пути под именем `.env` и т.п. остаются запрещены и внутри исключённых каталогов. По умолчанию список пуст — без явной записи в политике поведение прежнее. Если рабочим `uok-*` в каком-то проекте нужно управлять git worktree, это решается расширением `shell_allowlist` в `project.yaml` (по умолчанию им доступен только `git worktree list`; создание/удаление worktree — работа оркестратора).
+**The ISO-02 exception (`host_state_write_exceptions`).** The host's own persistent state (agent memory, settings) lives outside the project root, and without the exception the host's memory stops working while the hook is active. The directory list (entries like `~/.claude/`, expanded via `expanduser`) is read from `adapter.yaml` (Qoder, Cursor, Codex) or `claude-code.yaml` (Claude Code); the installer adds its own host's directory. It applies to main only (not `uok-*`); SEC-02 is checked earlier, so secret-named paths such as `.env` remain denied inside the excluded directories as well. By default the list is empty — without an explicit entry in the policy, the behavior is unchanged. If `uok-*` workers in a particular project need to manage git worktrees, that is solved by extending `shell_allowlist` in `project.yaml` (by default they get only `git worktree list`; creating/removing worktrees is the orchestrator's job).
 
-## 3. Дополнительные проверки для `uok-*`
+## 3. Additional checks for `uok-*`
 
-Во всех режимах: запись в управляющие файлы, заявки на запись, запрет опасных операций ролям с `sensitive_ops: never` (`uok-*`, кроме `uok-senior-engineer` и `uok-release-integration`). Пункты с пометкой **strict** действуют только в строгом режиме.
+In all modes: writes to control files denied, write claims enforced, dangerous operations denied to roles with `sensitive_ops: never` (`uok-*` except `uok-senior-engineer` and `uok-release-integration`). Items marked **strict** apply only in strict mode.
 
-- **strict:** **Пути только ASCII** на всех инструментах путей → иначе deny (SEC-04).
-- **strict:** **Grep и Glob запрещены** (deny SEC-04), в том числе без `path`. В списках инструментов агентов их тоже нет. Для поиска есть `uok_search.py`.
-- **strict:** **Чтение вне корня** → deny (ISO-02). Чтение `.orchestrator/audit/`, `.orchestrator/claims/`, `.git/` → deny (SEC-04).
-- **Запись в управляющие файлы** → deny (SEC-04). Это `.claude/`, `.qoder/`, `.cursor/`, `.codex/`, `.git/`, `.orchestrator/`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `.gitignore`, `<kit>/validation/`, `<kit>/core/`, `<kit>/adapters/` (`<kit>` = `kit_dir` из `claude-code.yaml`), а на любой глубине — файлы с именами `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `settings.json`, `settings.local.json`, `hooks.json`. Сравнение без учёта регистра.
-- **Заявки на запись**: если в `active.json` есть активные заявки, агент может писать только внутри своей. Если журнал заявок повреждён, любая запись агента запрещается.
-- **strict:** **MCP-вызовы** → deny (SEC-04). Эта проверка стоит раньше поиска секретов.
-- **strict:** **Ошибка внутри хука** при любом вызове `uok-*` → deny («failing closed»).
+- **strict:** **ASCII-only paths** on all path tools → otherwise deny (SEC-04).
+- **strict:** **Grep and Glob are denied** (deny SEC-04), including without `path`. They are also absent from the agents' tool lists. Search is provided by `uok_search.py`.
+- **strict:** **Reads outside the root** → deny (ISO-02). Reads of `.orchestrator/audit/`, `.orchestrator/claims/`, `.git/` → deny (SEC-04).
+- **Writes to control files** → deny (SEC-04). These are `.claude/`, `.qoder/`, `.cursor/`, `.codex/`, `.git/`, `.orchestrator/`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `.gitignore`, `<kit>/validation/`, `<kit>/core/`, `<kit>/adapters/` (`<kit>` = `kit_dir` from `claude-code.yaml`), and, at any depth, files named `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, `.mcp.json`, `settings.json`, `settings.local.json`, `hooks.json`. Comparison is case-insensitive.
+- **Write claims**: if `active.json` holds active claims, an agent may write only inside its own. If the claim ledger is corrupted, every write by the agent is denied.
+- **strict:** **MCP calls** → deny (SEC-04). This check runs before the secret scan.
+- **strict:** **An error inside the hook** on any `uok-*` call → deny ("failing closed").
 
-## 4. Ограниченный shell для `uok-*` (только strict)
+## 4. Restricted shell for `uok-*` (strict only)
 
-1. Вся команда не длиннее 2000 символов и состоит только из символов `A-Z a-z 0-9 _ . / : @ % + , = -`, пробела и разделителей `& ; |`. Кавычек, `\`, `$`, `` ` ``, `*?[]`, `(){}`, `~`, `<>`, переводов строки нет, поэтому трюкам с разбором shell не на чем работать. Проверка линейная и выполняется первой.
-2. Команда делится на сегменты по `&&`, `||`, `;`, `|`, `&` и переводу строки. **Каждый сегмент должен точно совпасть** с элементом `shell_allowlist` в `.orchestrator/policy/project.yaml` (пробелы нормализуются). Элемент, оканчивающийся на ` ...`, принимает аргументы, уже ограниченные шагом 1. Так помечен только `uok_search.py`, который сам проверяет свои аргументы.
-3. Роли `uok-senior-engineer` и `uok-release-integration` (`sensitive_ops: approval_required`) получают `ask` на опасную операцию, но только если все остальные сегменты команды есть в списке. Остальные роли получают deny.
+1. The whole command is no longer than 2000 characters and consists only of the characters `A-Z a-z 0-9 _ . / : @ % + , = -`, the space, and the separators `& ; |`. No quotes, `\`, `` ` ``, `*?[]`, `(){}`, `~`, `<>`, or newlines are allowed, so shell-parsing tricks have nothing to work with. The check is linear and runs first.
+2. The command is split into segments on `&&`, `||`, `;`, `|`, `&`, and newlines. **Every segment must match exactly** an item of `shell_allowlist` in `.orchestrator/policy/project.yaml` (spaces are normalized). An item ending in ` ...` accepts arguments that are already restricted by step 1. Only `uok_search.py` is marked this way, and it validates its own arguments.
+3. The roles `uok-senior-engineer` and `uok-release-integration` (`sensitive_ops: approval_required`) get `ask` on a dangerous operation, but only if every other segment of the command is in the list. The other roles get deny.
 
-Элементы могут содержать `{root}` — хук подставляет абсолютный путь корня, поэтому в политике нет машинных путей. Список по умолчанию: `git status`, `git diff`, `git diff --stat`, `git log --oneline -20`, `git worktree list`, `ls`, `ls -la`, `pwd`, `python3 -I {root}/.orchestrator/hooks/uok_search.py ...`, `python3 -I {root}/.orchestrator/hooks/test_g1_guard.py`. `cat`, `grep` и `pytest` исключены сознательно: свободные аргументы позволяли обходить защиту, а `pytest` выполняет произвольный код.
+Items may contain `{root}` — the hook substitutes the absolute root path, so the policy holds no machine-specific paths. The default list: `git status`, `git diff`, `git diff --stat`, `git log --oneline -20`, `git worktree list`, `ls`, `ls -la`, `pwd`, `python3 -I {root}/.orchestrator/hooks/uok_search.py ...`, `python3 -I {root}/.orchestrator/hooks/test_g1_guard.py`. `cat`, `grep`, and `pytest` are excluded deliberately: free-form arguments allowed bypassing the protection, and `pytest` executes arbitrary code.
 
-## 5. Опасные операции (SEC-07)
+## 5. Dangerous operations (SEC-07)
 
-Распознаются по глаголу в начале каждого сегмента, без регулярных выражений с откатом. Перед этим отбрасываются `( ) { }`, ключевые слова (`if then do else elif while until !`), присваивания `VAR=x` и обёртки (`sudo env command exec nohup time xargs doas nice timeout`) вместе с их опциями. Опасными считаются:
+They are recognized by the verb at the start of each segment, without backtracking regular expressions. Before that, `( ) { }`, the keywords (`if then do else elif while until !`), `VAR=x` assignments, and the wrappers (`sudo env command exec nohup time xargs doas nice timeout`) together with their options are stripped. The following are treated as dangerous:
 
-- `rm` с рекурсией (`-r`/`-R`/`--recursive`) и `-f`/`--force` в любом порядке и записи;
-- `git push` с `-f`, `-d`, `--force*`, `--mirror`, `--delete`, `--prune`, `+refspec`, `:refspec` (глобальные опции git вроде `-C dir` пропускаются);
+- `rm` with recursion (`-r`/`-R`/`--recursive`) and `-f`/`--force` in any order and spelling;
+- `git push` with `-f`, `-d`, `--force*`, `--mirror`, `--delete`, `--prune`, `+refspec`, `:refspec` (global git options such as `-C dir` are skipped);
 - `git worktree remove --force`, `git reset --hard`, `git clean -f`;
-- `kubectl|terraform|helm apply|destroy|delete`, публикация `npm|yarn|pnpm publish`, `twine upload`, `gh release create`;
-- деплой `vercel --prod`, `fly deploy`, `npm run deploy[:prod]`;
-- `DROP TABLE|DATABASE` у SQL-клиентов (`psql`, `mysql`, `sqlite3`, …).
+- `kubectl|terraform|helm apply|destroy|delete`, publishing via `npm|yarn|pnpm publish`, `twine upload`, `gh release create`;
+- deployments: `vercel --prod`, `fly deploy`, `npm run deploy[:prod]`;
+- `DROP TABLE|DATABASE` in SQL clients (`psql`, `mysql`, `sqlite3`, …).
 
-Для основной сессии есть ещё запасной поиск по всему тексту команды: `rm -rf` в одном блоке флагов, `DROP TABLE` и `git push` с силовым флагом в окне 400 символов. Он ловит формы внутри кавычек и `bash -c`, а для `uok-*` отключён. Ложные `ask` возможны (например, `echo rm -rf`), пропусков в эту сторону нет.
+For the main session there is also a fallback scan over the whole command text: `rm -rf` within one flag block, `DROP TABLE`, and `git push` with a force flag inside a 400-character window. It catches forms inside quotes and `bash -c`, and it is disabled for `uok-*`. False `ask` results are possible (for example, `echo rm -rf`); there are no misses in that direction.
 
-## 6. Заявки на запись
+## 6. Write claims
 
-Файл `.orchestrator/claims/active.json`:
+The file `.orchestrator/claims/active.json`:
 
 ```json
 {"claims": [{"task_id": "T-1", "agent": "uok-implementation-engineer", "write": ["src/a/*"]}]}
 ```
 
-- Совпадение: `fnmatch` по пути относительно корня или префикс `glob/`, без учёта регистра. Пути внутри `.claude/worktrees/<имя>/` сопоставляются так, будто они лежат в корне.
-- Освобождение: удалить запись или поставить `"released": true`.
-- Нет файла или нет активных заявок → проверка заявок не применяется. При этом остальные проверки, включая управляющие файлы, корень и секреты, действуют.
-- Заявки различаются по типу агента (`agent`). Два экземпляра одной роли друг от друга не изолированы.
+- Matching: `fnmatch` on the root-relative path or the `glob/` prefix, case-insensitive. Paths inside `.claude/worktrees/<name>/` are matched as if they were at the root.
+- Release: delete the entry or set `"released": true`.
+- No file, or no active claims → the claim check does not apply. The other checks, including control files, root bounds, and secrets, still apply.
+- Claims are distinguished by agent type (`agent`). Two instances of the same role are not isolated from each other.
 
-## 7. Поиск для агентов в strict: `uok_search.py`
+## 7. Search for agents in strict: `uok_search.py`
 
 ```
-python3 -I <корень проекта>/.orchestrator/hooks/uok_search.py PATTERN [RELATIVE_DIR]
+python3 -I <project root>/.orchestrator/hooks/uok_search.py PATTERN [RELATIVE_DIR]
 ```
 
-- Ищет только внутри корня проекта. Корень вычисляется от расположения скрипта, `CLAUDE_PROJECT_DIR` из окружения игнорируется.
-- Не идёт по симлинкам за пределы корня и пропускает секретные имена (те же `denied_path`, что в хуке).
-- Пропускает `.git`, `node_modules`, `__pycache__`, `.venv`, `.orchestrator/audit`, `.orchestrator/claims`. Отказывает, если стартовый каталог лежит вне корня, секретный, не ASCII или входит в эти исключения.
-- `PATTERN` — регулярное выражение Python длиной до 200 символов, не больше одного `+`; набор символов ограничен шагом 1 раздела 4.
-- Вывод: `путь:строка:текст`, не больше 200 совпадений; строки длиннее 10 000 символов не просматриваются.
+- Searches only inside the project root. The root is computed from the script's location; `CLAUDE_PROJECT_DIR` from the environment is ignored.
+- Does not follow symlinks out of the root and skips secret-named files (the same `denied_path` as in the hook).
+- Skips `.git`, `node_modules`, `__pycache__`, `.venv`, `.orchestrator/audit`, `.orchestrator/claims`. Refuses when the start directory is outside the root, secret-named, non-ASCII, or among these exclusions.
+- `PATTERN` is a Python regular expression up to 200 characters long, with at most one `+`; the character set is limited by step 1 of section 4.
+- Output: `path:line:text`, at most 200 matches; lines longer than 10,000 characters are not read.
 
-## 8. Журнал
+## 8. Audit log
 
-`.orchestrator/audit/g1.log`, по строке на событие: `<время> allow|deny|ask: [<агент> <инструмент>] <причина>` и `<время> fail-open: <описание>`. Пути пишутся через `repr`, поэтому подделать строку журнала переводом строки нельзя.
+`.orchestrator/audit/g1.log`, one line per event: `<time> allow|deny|ask: [<agent> <tool>] <reason>` and `<time> fail-open: <description>`. Paths are written via `repr`, so a log line cannot be forged with a newline.
 
-Fail-open с записью в журнал бывает только у основной сессии и только для инструментов, не связанных с безопасностью: невалидный JSON, событие не объект, `tool_input` не объект у `Read`. Запись, MCP и любой вызов `uok-*` при ошибке блокируются. Слишком глубокая вложенность JSON блокируется для всех.
+Fail-open with a log entry happens only for the main session and only for tools with no security role: invalid JSON, a non-object event, a non-object `tool_input` for `Read`. Writes, MCP, and any `uok-*` call are blocked on error. Excessively deep JSON nesting is blocked for all callers.
 
-## 9. Правила `permissions` в `settings.json` (вторая линия защиты)
+## 9. `permissions` rules in `settings.json` (second line of defense)
 
-- `deny`: `Read(...)` для секретных имён на любой глубине и для `~/.ssh/**`, `~/.aws/**`; `Edit(...)` для `.env*`, `*credentials*`, `*secret*` (правила `Edit` покрывают все инструменты записи; `Write(...)` Claude Code не применяет); `Bash(curl:*)`, `Bash(wget:*)`.
+- `deny`: `Read(...)` for secret names at any depth and for `~/.ssh/**`, `~/.aws/**`; `Edit(...)` for `.env*`, `*credentials*`, `*secret*` (`Edit` rules cover all write tools; Claude Code does not apply `Write(...)`); `Bash(curl:*)`, `Bash(wget:*)`.
 - `ask`: `Bash(git push:*)`, `Bash(rm -rf:*)`.
 
-## 10. Известные ограничения
+## 10. Known limitations
 
-- Если файл хука удалён или переименован, Claude Code блокирует все вызовы, на которые настроен хук (проверено: файл не найден → код выхода 2). Не перемещайте `.orchestrator/hooks/` при открытой сессии; переустановка через `install.py` безопасна.
-- Если заявок нет, `uok-*` может писать в любое незащищённое место внутри корня. Перед параллельной работой записывайте заявки.
-- WebFetch и WebSearch (есть у `uok-research-analyst` и `uok-release-integration`) хуком не проверяются.
-- `git diff` показывает изменённые отслеживаемые файлы целиком, поэтому секретные файлы не должны быть в git.
-- Таймаут хука, по имеющимся данным (не проверено), — неблокирующая ошибка, и вызов продолжается. Найденных входов, которые приближались бы к 30 с, нет.
-- В основной сессии не распознаются `eval`, косвенные вызовы через переменные, `find -delete`, `git branch -D`, `dd`, `truncate`. Это ответственность человека, который ведёт оркестратор.
-- В strict ролям без Bash (`uok-architect`, `uok-documentation-specialist`) поиск недоступен: пути к файлам им передаёт оркестратор.
-- В standard проверка аргументов Bash у исполнителей не делается: хук не разбирает `cat .env` в Bash; остаются только правила `permissions` и режим сессии.
+- If the hook file is deleted or renamed, Claude Code blocks every call the hook is configured for (verified: file not found → exit code 2). Do not move `.orchestrator/hooks/` while a session is open; reinstalling via `install.py` is safe.
+- With no claims in place, `uok-*` can write to any unprotected location inside the root. Record claims before parallel work.
+- WebFetch and WebSearch (available to `uok-research-analyst` and `uok-release-integration`) are not checked by the hook.
+- `git diff` shows changed tracked files in full, so secret files must not be in git.
+- A hook timeout, per available evidence (unverified), is a non-blocking error and the call proceeds. No known input comes anywhere near the 30 s timeout.
+- In the main session, `eval`, indirect calls through variables, `find -delete`, `git branch -D`, `dd`, and `truncate` are not recognized. That responsibility belongs to the human running the orchestrator.
+- In strict, roles without Bash (`uok-architect`, `uok-documentation-specialist`) have no search: the orchestrator passes them file paths.
+- In standard, Bash arguments of workers are not checked: the hook does not parse `cat .env` inside Bash; only the `permissions` rules and the session mode remain.
 
-## 11. Как проверить
+## 11. How to verify
 
 ```bash
 python3 -I .orchestrator/hooks/test_g1_guard.py
 ```
 
-123 теста: полный набор в режиме strict, отдельный набор для standard и тесты форматов Cursor, Codex и Qoder. Одинаково проходят под unittest и pytest. Каждый запускает хук отдельным процессом на временном корне с собственной политикой и проверяет решение, код требования и строку журнала. Тесты на Unicode-свёртку выполняются только на томах, которые её поддерживают. Есть тесты с ограничением по времени на вредоносные входы.
+123 tests: the full suite in strict mode, a separate set for standard, and tests for the Cursor, Codex, and Qoder formats. They pass identically under unittest and pytest. Each test runs the hook in a separate process on a temporary root with its own policy and checks the decision, the requirement code, and the log line. Unicode-folding tests run only on volumes that support folding. There are time-limited tests against malicious inputs.

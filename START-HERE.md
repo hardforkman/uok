@@ -8,7 +8,7 @@ directory to an AI coding agent in any supported environment; it contains
 everything needed to understand, implement, and validate the system without
 the original authoring application.
 
-Руководство по применению на русском: [USAGE-GUIDE-RU.md](USAGE-GUIDE-RU.md).
+Usage guide in Russian: [USAGE-GUIDE-RU.md](USAGE-GUIDE-RU.md).
 
 > Note: this kit is a specification + reference kernel + validation package.
 > It is not a running service. "Installing" it means implementing its adapter
@@ -63,7 +63,7 @@ Every installer also creates a launcher skill: run `/uok <task>` (Claude Code, Q
 `$uok` mention (Codex) to start orchestration; see USAGE-GUIDE-RU §6.1 and your adapter README §12-13.
 Start the argument with a role id (`/uok research-analyst <task>`) to call one agent, with `all` to run the
 full roster, or use `/uok roles` to list roles. Update the kit from its git remote with `bash updater.sh`
-(latest release by default, `--edge` follows main, `--check` previews; see README "Обновление").
+(latest release by default, `--edge` follows main, `--check` previews; see README "Updating").
 
 Live checks for Qoder, Cursor and Codex: paste the prompt from
 [handoff/LIVE-CHECKS.md](handoff/LIVE-CHECKS.md) into that application's agent chat.

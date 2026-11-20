@@ -33,7 +33,7 @@ remain unverified (configuration gap, not a probe).
 | 5 | `python3 .../uok init --host qoder --project /tmp/uok-live-test` | exit 0; 10 `uok-*` agents, `.qoder/rules/uok.md`, `.qoder/skills/uok/SKILL.md`, AGENTS.md section, `.orchestrator/` policy + G1 hook, PreToolUse merged into `.qoder/settings.json` | verified_live |
 | 6 | Installer verification (ran inside step 5) | hook test suite: OK (exit 0, 123 tests); smoke event (qoder: secret file → deny): PASS | verified_live |
 | 7 | Artifact re-read | `.qoder/agents/` (10 files) and `.qoder/skills/uok/SKILL.md` present | verified_live |
-| 8 | User typed `/uok составь краткое содержание AGENTS.md` in a NEW session opened on the installed project | skill invoked (`Launching skill: uok`); task classified trivial read-only; executed directly by the orchestrator (allowed for small tasks); evidence-based summary of all 18 lines with verification status (session transcript 346adbae, 2026-11-17 18:55 local) | verified_live |
+| 8 | User typed `/uok составь краткое содержание AGENTS.md` ("summarize AGENTS.md briefly" — kept verbatim as typed) in a NEW session opened on the installed project | skill invoked (`Launching skill: uok`); task classified trivial read-only; executed directly by the orchestrator (allowed for small tasks); evidence-based summary of all 18 lines with verification status (session transcript 346adbae, 2026-11-17 18:55 local) | verified_live |
 | 9 | G1 hook in the real session | `.orchestrator/audit/g1.log`: `allow: [main] Bash`, `allow: [main] Read AGENTS.md` at invocation time — PreToolUse hook live in Qoder Desktop | verified_live |
 | 10 | Idempotent refresh after a skill-text fix | re-run `uok init`: only `.qoder/skills/uok/SKILL.md` updated; policies kept; hook suite OK, smoke PASS | verified_live |
 | 11 | Worker write-denial probe: orchestrator dispatched `uok-implementation-engineer` to Write `.qoder/settings.json` (`{"hookTest": true}`), one attempt, no workarounds | DENIED before write: `[UOK G1] uok-implementation-engineer: write to guard controls blocked (SEC-04)`; audit log 19:14:54 `deny: [uok-implementation-engineer Write]` — worker identity recognized live in hook input | verified_live |
@@ -96,7 +96,7 @@ change was made.
 - `uok bootstrap` + `uok-init` + `uok init` primary path AND the `/uok`
   launcher + live G1 hook logging: **verified_live in Qoder Desktop** (this report).
 - Qoder adapter overall: **integration_tested** (raised 2026-11-17 per
-  LIVE-CHECKS "После проверки"): all items a–e passed live — install path,
+  LIVE-CHECKS "After the checks"): all items a–e passed live — install path,
   launcher, worker dispatch (read-only and writer roles), hook denials
   (SEC-02/04), the full SEC-07 approval round-trip, claims enforcement and
   parallel disjoint writers (LC-04). Not yet probed: model selectors

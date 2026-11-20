@@ -1,15 +1,16 @@
-# Живая проверка адаптеров Qoder, Cursor, Codex
+# Live verification of the Qoder, Cursor and Codex adapters
 
-Kit version: 1.0.0 · Требование: AC-12, ADP-03, COMPATIBILITY-TESTS §3
+Kit version: 1.0.0 · Requirement: AC-12, ADP-03, COMPATIBILITY-TESTS §3
 
-Установщики этих адаптеров проверены на тестовых проектах, но не внутри самих приложений: на машине
-автора нет их агентских CLI. Живую проверку выполняет агент самой среды. Откройте проект в приложении
-и вставьте в его агентский чат один из промптов ниже.
+The installers of these adapters have been verified on test projects, but not inside the
+applications themselves: the author's machine has none of their agent CLIs. Live verification
+is performed by the host's own agent. Open a project in the application and paste one of the
+prompts below into its agent chat.
 
-Первичный путь установки — `uok init`: один раз выполните
-`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap`, перезапустите сессию и напишите в чате
-`uok init` (Codex: `$uok-init`). Промпты ниже — запасной путь и сами живые проверки;
-пункт f) каждого промпта проверяет скилл-ярлык.
+The primary installation path is `uok init`: run
+`python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap` once, restart the session and type
+`uok init` in the chat (Codex: `$uok-init`). The prompts below are the fallback path and the
+live checks themselves; item f) of each prompt verifies the skill shortcut.
 
 ## Qoder
 
@@ -78,8 +79,8 @@ Install and live-verify the Universal Orchestrator Kit in this project for Codex
    Mark only what you actually ran as verified_live.
 ```
 
-## После проверки
+## After the checks
 
-Если все пункты прошли, зрелость адаптера в его README и в START-HERE поднимается до
-`integration_tested`. Если что-то не прошло, это ошибка в адаптере: результат вместе с выводом стоит
-передать для исправления.
+If every item passed, the adapter's maturity in its README and in START-HERE rises to
+`integration_tested`. If something failed, it is an adapter bug: hand the result together
+with the output over to the maintainer so it can be fixed.
