@@ -175,7 +175,7 @@ class MarkedSectionRepairTest(unittest.TestCase):
         orphan = ("## Universal Orchestrator Kit\n\nKit: `<kit>` (spec, routing policy).\n\n"
                   "The main session is the **orchestrator**; workers are the subagents `uok-*`.\n"
                   "Rules:\n- old orphan rule\n"
-                  "User instructions override kit rules; record deviations in `.orchestrator/audit/`.\n\n")
+                  "- User instructions override kit rules; record deviations in `.orchestrator/audit/`.\n\n")
         user_own = ("## Universal Orchestrator Kit\n\nMy own notes about orchestration — "
                     "keep this user text.\n\n")
         return ("# My project\n\nUser intro line.\n\n<!-- UOK:END -->\n\n"

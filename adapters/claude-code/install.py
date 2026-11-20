@@ -78,7 +78,7 @@ def strip_marked_sections(text):
         if lines[k].strip() == "## Universal Orchestrator Kit":
             j, end = k + 1, None
             while j < len(lines) and j <= k + 40:
-                if lines[j].startswith("User instructions override kit rules"):
+                if "User instructions override kit rules" in lines[j]:
                     end = j
                     break
                 if lines[j].startswith("## ") or lines[j].startswith("<!-- "):
