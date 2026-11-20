@@ -137,6 +137,20 @@ class GraphifyIntegrationTest(unittest.TestCase):
              "agent_type": "uok-research-analyst"}
         self.assertNotIn('"deny"', self.g1(q).stdout)
 
+    def test_wrapper_finds_cli_in_local_bin(self):
+        """uv/pipx put graphify in ~/.local/bin, which GUI-session PATHs often lack —
+        the wrapper must fall back there (same as the installer's find_cli)."""
+        r = self.init(extra=("--mode", "strict"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        local = self.home / ".local" / "bin"
+        local.mkdir(parents=True)
+        shutil.copy2(self.bin / "graphify", local / "graphify")
+        hook = str(self.proj / ".orchestrator/hooks/uok_graph.py")
+        r = subprocess.run([sys.executable, "-I", hook, "query", "auth"], capture_output=True,
+                           text=True, env=self.env(with_cli=False), cwd=str(self.proj), timeout=60)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("QUERY:auth", r.stdout)
+
     def test_strict_mode_wrapper(self):
         r = self.init(extra=("--mode", "strict"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

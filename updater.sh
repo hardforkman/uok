@@ -23,7 +23,8 @@
 # directly. Each project also holds installed copies (G1 hook, agents, launcher skill,
 # policy). After a successful update this script runs `uok refresh`, which re-applies the
 # kit to every project recorded by `uok init` (additive, user policy kept, backups made,
-# same mode/models as installed). Restart the agent sessions afterwards.
+# same mode/models as installed), and `uok bootstrap`, which re-syncs the user-level skills.
+# Restart the agent sessions afterwards.
 set -euo pipefail
 
 KIT_DIR="$(cd "$(dirname "$0")" && pwd -P)"   # -P: resolve symlinks like git does
@@ -128,6 +129,10 @@ note "updated to $LABEL${VERSION_NOW:+ (kit $VERSION_NOW)} at $(git -C "$KIT_DIR
 if [ "$REFRESH" -eq 1 ]; then
     command -v python3 >/dev/null 2>&1 || die "python3 is required to refresh projects (re-run later: python3 \"$KIT_DIR/uok\" refresh)"
     python3 "$KIT_DIR/uok" refresh
+    # Keep the user-level skills (~/.claude/skills, ~/.dsh/skills, ...) on the same release
+    # as the projects — otherwise their embedded kit version drifts behind every update.
+    python3 "$KIT_DIR/uok" bootstrap \
+        || note "user-level skill update skipped (no host config dirs found in ~; run bootstrap manually with --host)"
 else
     note "projects not refreshed (--no-refresh). Run: python3 \"$KIT_DIR/uok\" refresh"
 fi

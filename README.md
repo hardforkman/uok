@@ -75,8 +75,9 @@ in every recorded project, so only deliberately released versions reach them. Th
 fast-forward only and never clobbers local edits; a kit copy that is not a git repository
 (release zip, folder copy) is repaired automatically — the old folder is preserved as
 `<kit>.backup-<timestamp>` and replaced by a fresh clone. Projects are re-applied from the
-registry (`~/.uok/projects.json`) with their original mode and models; user files are never
-touched, backups go to `.orchestrator/backups/`.
+registry (`~/.uok/projects.json`) with their original mode and models, and the user-level
+skills (`~/.claude/skills`, `~/.dsh/skills`, …) are re-synced so their version never drifts
+behind the release; user files are never touched, backups go to `.orchestrator/backups/`.
 
 ## How it is verified
 

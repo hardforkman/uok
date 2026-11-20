@@ -33,6 +33,9 @@ def main(argv):
     if len(question) > MAX_WORDS or not question.isascii():
         print("refused: question too long or non-ASCII"); return 2
     exe = shutil.which("graphify")
+    if not exe:   # uv/pipx default target is often missing from GUI-session PATH (same fallback as the installer's find_cli)
+        cand = os.path.expanduser("~/.local/bin/graphify")
+        exe = cand if os.path.isfile(cand) and os.access(cand, os.X_OK) else None
     graph = os.path.join(g.REAL_ROOT, "graphify-out", "graph.json")
     if not exe or not os.path.isfile(graph):
         print("context graph unavailable; ask the orchestrator to build it (graphify extract . --code-only)"); return 2

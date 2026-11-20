@@ -363,6 +363,31 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         self.assertIn("UPDATED-MARKER", after)
         self.assertIn("model: fable", (self.proj / ".claude" / "agents" / "uok-code-reviewer.md").read_text())
 
+    def test_updater_re_syncs_user_level_skills(self):
+        Path(self.home, ".claude").mkdir()   # a host config dir, so bootstrap auto-detects
+        inst = self.upstream / "adapters" / "claude-code" / "install.py"
+        inst.write_text(inst.read_text().replace("Report results with actual command output",
+                                                 "Report results with actual command output (UPDATED-MARKER)"))
+        self.git(self.upstream, "commit", "-q", "-am", "v2")
+        self.git(self.upstream, "tag", "v1.1.0")
+        r = self.updater()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        skill = Path(self.home, ".claude", "skills", "uok-init", "SKILL.md")
+        self.assertTrue(skill.exists(), "the updater must (re)create the user-level skill")
+        self.assertIn(MARK, skill.read_text(encoding="utf-8"))
+        self.assertNotIn("user-level skill update skipped", r.stdout)
+
+    def test_updater_skips_bootstrap_gracefully_without_hosts(self):
+        # scratch HOME has no host config dirs: bootstrap exits non-zero, the updater must not fail
+        inst = self.upstream / "adapters" / "claude-code" / "install.py"
+        inst.write_text(inst.read_text().replace("Report results with actual command output",
+                                                 "Report results with actual command output (UPDATED-MARKER)"))
+        self.git(self.upstream, "commit", "-q", "-am", "v2")
+        self.git(self.upstream, "tag", "v1.1.0")
+        r = self.updater()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("user-level skill update skipped", r.stdout)
+
     def test_updater_no_refresh_flag_leaves_projects(self):
         self.kit_run(["init", "--host", "claude-code", "--project", str(self.proj)])
         skill = self.proj / ".claude" / "skills" / "uok" / "SKILL.md"
