@@ -118,6 +118,8 @@ class UokCliTest(unittest.TestCase):
                 self.assertIn(f"--host {host}", body)
                 self.assertIn("cat ~/.uok/location", body)   # path is read from the pointer, not embedded
                 self.assertIn("pyyaml", body)                # the PyYAML prerequisite note
+                self.assertIn("github.com/hardforkman/uok/issues", body)   # report instead of patching
+                self.assertIn("never hand-write", body.lower())             # kit discipline
                 self.assertNotIn(KIT, body)
                 self.assertIn("--dry-run", body)
 

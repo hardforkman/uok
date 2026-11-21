@@ -83,12 +83,16 @@ behind the release; user files are never touched, backups go to `.orchestrator/b
 
 The kit ships its own validation: `validation/self_test.py` (16 structural checks),
 `validation/behavior_tests.py` (63 behavior checks incl. the graph-aware routing scenario
-TS-13), `adapters/shared/hooks/test_g1_guard.py` (128 hook tests),
+TS-13), `adapters/shared/hooks/test_g1_guard.py` (129 hook tests),
 `adapters/shared/test_install_skill.py`, `adapters/shared/test_uok_cli.py` and
 `adapters/shared/test_graphify_integration.py` — all six run before every release.
 Live checks per host are documented in `handoff/LIVE-CHECKS.md` and recorded in
 `handoff/INSTALLATION-REPORT-*.md`; the G1 hook additionally requires a recorded human
 review (`handoff/HUMAN-REVIEW-G1.md`).
+
+Found a bug? Reproduce it with a command and [open an issue](https://github.com/hardforkman/uok/issues) —
+don't patch kit files by hand: `uok refresh` re-applies the kit from its source and
+silently overwrites local edits.
 
 ## Documentation
 

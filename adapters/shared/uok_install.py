@@ -293,6 +293,12 @@ class BaseInstaller:
             "- No success claim without evidence (command output). Tag unverified claims honestly.",
             f"- The G1 hook (`.orchestrator/hooks/g1_guard.py --format {self.FORMAT}`) {self.hook_line()}",
             *([graphify_integration.graph_rule(self)] if self.context_graph == "graphify" else []),
+"- Kit discipline: install and update ONLY through the kit's own commands (`uok init` / `uok refresh` / `uok bootstrap` / `updater.sh`). Never hand-write "
+  "kit-managed files (skills, hooks, role agents, policy) and never patch the kit folder — "
+  "`refresh` re-applies the kit from its source and silently overwrites local edits. If "
+  "something looks broken, re-run the matching command first; if it still misbehaves, "
+  "reproduce it with a command and report it (github.com/hardforkman/uok/issues) instead "
+  "of patching — a local patch is a report you forgot to file.",
             "- User instructions override kit rules; record deviations in `.orchestrator/audit/`.",
             MARK_END, ""])
 

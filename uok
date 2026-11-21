@@ -280,6 +280,11 @@ interpreter that has it — never guess, check.
    `{LAUNCH_INVOKE[host]} <task>` (see the kit's USAGE-GUIDE.md §6).
 
 Do not modify user-authored agents, skills or hooks — the installer preserves them.
+Kit discipline: never hand-write the kit's files (skills, hooks, role agents, policy) and
+never patch the kit folder — install and update only via the commands above (`uok init` /
+`refresh` / `bootstrap` / `updater.sh`); `refresh` silently overwrites local edits. If a
+kit file misbehaves, report it with a reproduction at github.com/hardforkman/uok/issues
+instead of patching.
 Do not perform sensitive operations (deploys, credential changes, publication).
 """
 
@@ -325,6 +330,10 @@ for the **dsh** host (DeepSeek Harness). The kit folder is recorded in
 4. Report claims only with evidence (command output); tag unverified claims honestly.
    Workers never rebuild the context graph; stale graph => main session runs
    `graphify update .` or reports `degraded_context_graph` (CG-03).
+   Kit discipline: never patch kit files or hand-write kit-managed files (skills, hooks,
+   role agents, policy) — `uok refresh` re-applies the kit and silently overwrites local
+   edits. If a kit file misbehaves, report it with a reproduction at
+   github.com/hardforkman/uok/issues instead of patching.
 
 Do not perform sensitive operations (deploys, credential changes, publication).
 """
