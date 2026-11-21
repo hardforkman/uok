@@ -17,6 +17,13 @@ refresh   Re-applies the kit to every project recorded by `init` (~/.uok/project
 stats     Per-project statistics derived only from what the kit actually recorded: G1
           safety decisions (audit log), context-graph state and freshness, ledgers, the
           project registry. Honest about what is not measured (CG-07). Offline, stdlib.
+
+Every command also proposes updates when a newer release tag exists in the publish
+repo (throttled to one check per 24 h, cached in ~/.uok/update-check.json, fail-open
+offline; the proposal goes to stderr and is repeated until you update). Control:
+UOK_REPO=<url> overrides the repo, UOK_UPDATE_CHECK_HOURS=<n> the interval,
+UOK_UPDATE_CHECK=off disables. The kit never auto-updates: refresh rewrites projects,
+so updating is always a human decision (bash <kit>/updater.sh).
 bootstrap One-time per machine: registers a user-level `uok-init` skill so that typing
           `uok init` (or /uok-init; Codex: $uok-init) in ANY project session runs init.
           Global skill locations [verified_doc 2026-11-17]: ~/.claude/skills,
@@ -40,6 +47,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 KIT = os.path.dirname(os.path.realpath(__file__))
 try:   # single source of truth: the VERSION file (release), not a hardcoded literal
@@ -99,6 +107,57 @@ def resolve_host(requested, project):
 
 
 POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
+
+
+# ---------- update proposal (never auto-update: refresh rewrites projects, a human decides)
+PUBLISH_URL = os.environ.get("UOK_REPO", "https://github.com/hardforkman/uok.git")
+CHECK_STATE = os.path.join(os.path.expanduser("~"), ".uok", "update-check.json")
+CHECK_INTERVAL = int(os.environ.get("UOK_UPDATE_CHECK_HOURS", "24")) * 3600
+
+
+def _semver(tag):
+    try:
+        return tuple(int(p) for p in tag[1:].split("."))
+    except (ValueError, IndexError):
+        return None
+
+
+def maybe_notice_update():
+    """Propose (never perform) an update: throttled git ls-remote of the publish repo,
+    fail-open on any error, notice on stderr so --json output stays clean. While the
+    cached result says a newer release exists, the proposal repeats without the network."""
+    if os.environ.get("UOK_UPDATE_CHECK", "").lower() in ("off", "0", "no", "false"):
+        return
+    installed = _semver("v" + release_version())
+    try:
+        state = json.load(open(CHECK_STATE, encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    latest = _semver(state.get("latest") or "")
+    if latest and installed and latest > installed:
+        print(f"uok: update available: {state['latest'][1:]} (installed {release_version()}) — "
+              f"run `bash {KIT}/updater.sh --check` to preview, `bash {KIT}/updater.sh` to update",
+              file=sys.stderr)
+    if time.time() - state.get("checked_at", 0) < CHECK_INTERVAL:
+        return
+    try:
+        out = subprocess.run(["git", "ls-remote", "--tags", PUBLISH_URL, "v[0-9]*"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return   # offline or git missing: silent, fail-open
+    tags = [m for t in out.splitlines() if (m := _semver(t.rsplit("/", 1)[-1]))]
+    if not tags:
+        return
+    latest_tag = "v" + ".".join(str(p) for p in max(tags))
+    try:
+        os.makedirs(os.path.dirname(CHECK_STATE), exist_ok=True)
+        json.dump({"checked_at": time.time(), "latest": latest_tag}, open(CHECK_STATE, "w", encoding="utf-8"))
+    except OSError:
+        pass
+    if installed and max(tags) > installed:
+        print(f"uok: update available: {latest_tag[1:]} (installed {release_version()}) — "
+              f"run `bash {KIT}/updater.sh --check` to preview, `bash {KIT}/updater.sh` to update",
+              file=sys.stderr)
 
 
 def write_pointer():
@@ -552,6 +611,7 @@ def main():
     pb.add_argument("--host", choices=("auto", "all") + HOSTS, default="auto")
     pb.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    maybe_notice_update()
     if a.cmd == "locate":
         sys.exit(cmd_locate(a))
     if a.cmd == "stats":

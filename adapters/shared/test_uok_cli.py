@@ -252,6 +252,58 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(len(d["not_measured"]), 2)
 
 
+class UpdateNoticeTest(unittest.TestCase):
+    """The update proposal: throttled ls-remote of the publish repo, cached, fail-open,
+    stderr-only, never an auto-update. Uses a scratch HOME + a local scratch 'remote'."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="uok-update-home-")
+        self.remote = tempfile.mkdtemp(prefix="uok-update-remote-") + "/remote.git"
+        r = subprocess.run(["git", "init", "-q", "--bare", self.remote], capture_output=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        w = tempfile.mkdtemp(prefix="uok-update-work-")
+        self.addCleanup(shutil.rmtree, w, True)
+        subprocess.run(["git", "init", "-q", "-b", "main", w], capture_output=True, check=True)
+        open(os.path.join(w, "f"), "w").write("x")
+        subprocess.run(["git", "add", "f"], cwd=w, capture_output=True, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "v1"],
+                       cwd=w, capture_output=True, check=True)
+        subprocess.run(["git", "tag", "v9.9.9"], cwd=w, capture_output=True, check=True)
+        subprocess.run(["git", "push", "-q", self.remote, "main", "v9.9.9"], cwd=w, capture_output=True, check=True)
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.addCleanup(shutil.rmtree, self.remote, True)
+
+    def run_env(self, extra):
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
+        env.update(HOME=self.home, PYTHONDONTWRITEBYTECODE="1")
+        env.update(extra)
+        return subprocess.run([sys.executable, UOK, "refresh"], capture_output=True, text=True,
+                              env=env, cwd=self.home, timeout=120)
+
+    def test_newer_tag_proposed_on_stderr_and_cached(self):
+        r = self.run_env({"UOK_REPO": self.remote, "UOK_UPDATE_CHECK_HOURS": "0"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("update available: 9.9.9", r.stderr)     # stderr: JSON output stays clean
+        self.assertNotIn("update available", r.stdout)
+        state = json.loads(open(os.path.join(self.home, ".uok/update-check.json")).read())
+        self.assertEqual(state["latest"], "v9.9.9")
+
+    def test_proposal_repeats_from_cache_without_network(self):
+        self.run_env({"UOK_REPO": self.remote, "UOK_UPDATE_CHECK_HOURS": "0"})
+        r = self.run_env({"UOK_REPO": "/no/such/repo"})        # network gone: cached proposal persists
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("update available: 9.9.9", r.stderr)
+
+    def test_off_switch_and_offline_are_silent(self):
+        r = self.run_env({"UOK_UPDATE_CHECK": "off", "UOK_REPO": self.remote})
+        self.assertEqual(r.returncode, 0)
+        self.assertNotIn("update available", r.stderr)
+        r = self.run_env({"UOK_REPO": "/no/such/repo"})        # offline + no cache: fail-open silence
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("update available", r.stderr)
+
+
 class SharedKitRelocationTest(unittest.TestCase):
     """Kit in a shared folder: projects store <kit>, the real path lives in ~/.uok/location only."""
 
