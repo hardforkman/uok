@@ -75,6 +75,23 @@ class UokCliTest(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("invalid choice", r.stderr)
 
+    def test_init_dsh_alias_installs_claude_code_layout(self):
+        """DSH has no adapter of its own: --host dsh must install the claude-code layout
+        (DSH reads CLAUDE.md and .claude/agents), record host 'dsh', and refresh must
+        dispatch it back to the same adapter."""
+        r = run_uok(["init", "--host", "dsh", "--project", str(self.proj)], self.home, self.proj)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("host=dsh", r.stdout)
+        self.assertIn("Claude Code adapter", r.stdout)          # dispatched to the alias target
+        self.assertTrue(os.path.exists(os.path.join(str(self.proj), "CLAUDE.md")))   # the layout DSH reads
+        self.assertIn("UOK:BEGIN", open(os.path.join(str(self.proj), "CLAUDE.md"), encoding="utf-8").read())
+        reg = json.loads(Path(self.home, ".uok/projects.json").read_text())["projects"]
+        self.assertEqual(reg[-1]["host"], "dsh")
+        rr = run_uok(["refresh"], self.home, self.proj)
+        self.assertEqual(rr.returncode, 0, rr.stdout + rr.stderr)
+        self.assertIn("dsh ->", rr.stdout)
+        self.assertIn("0 failed", rr.stdout)
+
     def test_init_auto_detects_host_from_env(self):
         r = run_uok(["init", "--dry-run"], self.home, self.proj, env_extra={"CLAUDECODE": "1"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -100,6 +117,7 @@ class UokCliTest(unittest.TestCase):
                 self.assertIn(MARK, fm["description"])
                 self.assertIn(f"--host {host}", body)
                 self.assertIn("cat ~/.uok/location", body)   # path is read from the pointer, not embedded
+                self.assertIn("pyyaml", body)                # the PyYAML prerequisite note
                 self.assertNotIn(KIT, body)
                 self.assertIn("--dry-run", body)
 

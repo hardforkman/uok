@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Universal Orchestrator Kit launcher (kit 1.0.0).
 
-  python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init [--host auto|claude-code|qoder|cursor|codex]
+  python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init [--host auto|claude-code|qoder|cursor|codex|dsh]
           [--project DIR] [--mode standard|strict] [--models tier1=..,tier2=..,tier3=..,review=..]
           [--graphify auto|install|off] [--dry-run]
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap [--host auto|all|claude-code|qoder|cursor|codex]
@@ -57,6 +57,9 @@ def release_version():
 
 
 HOSTS = ("claude-code", "qoder", "cursor", "codex")
+# DSH (DeepSeek Harness) has no dedicated adapter: its sessions read CLAUDE.md and
+# .claude/agents, i.e. the claude-code layout — so `--host dsh` installs exactly that.
+ADAPTER_ALIAS = {"dsh": "claude-code"}
 BOOT_MARK = "(Universal Orchestrator Kit bootstrap)"
 GLOBAL_SKILL_DIR = {"claude-code": ".claude/skills", "qoder": ".qoder/skills",
                     "cursor": ".cursor/skills", "codex": ".agents/skills"}
@@ -92,7 +95,7 @@ def resolve_host(requested, project):
         return host
     if ambiguous:
         sys.exit(f"uok: several hosts look present ({', '.join(ambiguous)}); pass --host explicitly")
-    sys.exit("uok: cannot detect the host; pass --host claude-code|qoder|cursor|codex")
+    sys.exit("uok: cannot detect the host; pass --host claude-code|qoder|cursor|codex|dsh")
 
 
 POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
@@ -136,7 +139,8 @@ def record_project(project, host, mode, models, graphify="auto"):
 
 
 def run_installer(project, host, mode, models, dry_run, graphify="auto"):
-    installer = os.path.join(KIT, "adapters", host, "install.py")
+    adapter = ADAPTER_ALIAS.get(host, host)   # dsh -> claude-code layout (DSH reads CLAUDE.md)
+    installer = os.path.join(KIT, "adapters", adapter, "install.py")
     cmd = [sys.executable, installer, "--project", project, "--mode", mode, "--graphify", graphify]
     if models:
         cmd += ["--models", models]
@@ -175,7 +179,7 @@ def cmd_refresh(a):
     failed, done = [], 0
     for e in entries:
         project, host = e.get("project", ""), e.get("host", "")
-        if host not in HOSTS or not os.path.isdir(project):
+        if (host not in HOSTS and host not in ADAPTER_ALIAS) or not os.path.isdir(project):
             print(f"uok refresh: skipping {project or '?'} ({host or '?'}): project missing or host unknown")
             continue
         print(f"uok refresh: {host} -> {project}")
@@ -198,6 +202,9 @@ description: "Install the Universal Orchestrator Kit into the current project {B
 Install the Universal Orchestrator Kit (kit {KIT_VERSION}) into THIS project for **{host}**.
 The kit folder is recorded in `~/.uok/location` (read it with `cat ~/.uok/location`). If that
 path no longer exists, ask the user where the kit lives now and tell them to run `uok locate` from there.
+Requires Python >= 3.10 with PyYAML: if the default `python3` lacks it (`import yaml` fails),
+run `pip3 install --user pyyaml` first, or invoke the commands below with a project venv
+interpreter that has it — never guess, check.
 
 1. Show the plan first (use the session's current project root, quoted):
    `python3 "$(cat ~/.uok/location)/uok" init --host {host} --project "<project root>" --dry-run`
@@ -528,7 +535,7 @@ def main():
     ap.add_argument("--version", action="version", version=f"uok release {release_version()} (kit spec {KIT_VERSION})")
     sub = ap.add_subparsers(dest="cmd", required=True)
     pi = sub.add_parser("init", help="install the kit into a project (primary installation path)")
-    pi.add_argument("--host", choices=("auto",) + HOSTS, default="auto")
+    pi.add_argument("--host", choices=("auto",) + HOSTS + tuple(ADAPTER_ALIAS), default="auto")
     pi.add_argument("--project", default=None, help="project root (default: current directory)")
     pi.add_argument("--mode", choices=("standard", "strict"), default="standard")
     pi.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= selectors for the host")
