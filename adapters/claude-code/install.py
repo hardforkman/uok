@@ -173,7 +173,11 @@ class Installer:
                 return
         hooks = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
         ours = [h for h in hooks if any("g1_guard.py" in x.get("command", "") for x in h.get("hooks", []))]
-        entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": HOOK_CMD, "timeout": 30}]}
+        # onFailure=block: if the hook times out or crashes, the tool call is blocked, not allowed.
+        # Without it Claude Code lets the call through (docs: hooks, "Block the action when a hook fails").
+        # Requires Claude Code >= 2.1.295. Timeout raised: under load the check must still finish.
+        entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": HOOK_CMD,
+                                                     "timeout": 120, "onFailure": "block"}]}
         if ours:
             ours[0].clear(); ours[0].update(entry)
         else:
