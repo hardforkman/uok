@@ -426,10 +426,14 @@ def main():
         check("TS-10", outcome == "rejected", f"{label}: {outcome} (expected rejected)")
 
     # doc_only_verification flag when the chosen mechanism is only verified_doc
-    codex_profile = rk.load_yaml("adapters/codex/PROFILE.yaml")
-    _, cflags = rk.select_execution_environment(codex_profile, {})
-    check("TS-12", "doc_only_verification" in cflags,
-          f"doc-only adapter flagged: {cflags}")
+    # Synthetic profiles, so the check does not depend on which real adapter is currently doc-only.
+    def _profile(status):
+        return {"capabilities": {k: {"status": status} for k in
+                ("custom_agents", "parallel_dispatch", "per_agent_model_selection")}}
+    _, dflags = rk.select_execution_environment(_profile("verified_doc"), {})
+    check("TS-12", "doc_only_verification" in dflags, f"doc-only adapter flagged: {dflags}")
+    _, lflags = rk.select_execution_environment(_profile("verified_live"), {})
+    check("TS-12", "doc_only_verification" not in lflags, f"live-verified adapter not flagged: {lflags}")
     cc_profile = rk.load_yaml("adapters/claude-code/PROFILE.yaml")
     _, ccflags = rk.select_execution_environment(cc_profile, {})
     check("TS-12", "doc_only_verification" not in ccflags,

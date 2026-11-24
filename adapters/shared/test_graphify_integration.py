@@ -54,8 +54,11 @@ class GraphifyIntegrationTest(unittest.TestCase):
     def env(self, with_cli=True, extra=None):
         e = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
         e.update(HOME=str(self.home), PYTHONDONTWRITEBYTECODE="1")
-        if with_cli:
-            e["PATH"] = str(self.bin) + os.pathsep + e.get("PATH", "")
+        # Isolation: a real graphify installed on the developer's machine (e.g. ~/.local/bin) must never
+        # leak into these tests, which model "CLI present" (the stub) and "CLI absent" explicitly.
+        clean = os.pathsep.join(d for d in e.get("PATH", "").split(os.pathsep)
+                                if not (d and os.access(os.path.join(d, "graphify"), os.X_OK)))
+        e["PATH"] = (str(self.bin) + os.pathsep + clean) if with_cli else clean
         if extra: e.update(extra)
         return e
 
