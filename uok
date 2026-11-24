@@ -297,6 +297,12 @@ def cmd_refresh(a):
     if apply:
         write_pointer()
     projects = list(dict.fromkeys(e.get("project", "") for e in entries))
+    if getattr(a, "project", None):   # one project at a time
+        only = os.path.realpath(a.project)
+        projects = [p for p in projects if p == only]
+        if not projects:
+            print(f"uok refresh: {only} is not in the registry (run `uok init` there first); nothing done")
+            return 0
     failed, refreshed, reconciled = [], 0, []
     for project in projects:
         if not project or not os.path.isdir(project):
@@ -709,6 +715,7 @@ def main():
     pi.add_argument("--dry-run", action="store_true")
     pr = sub.add_parser("refresh", help="re-apply the kit to projects it is already installed in (dry-run unless --yes)")
     pr.add_argument("--yes", action="store_true", help="apply; without it refresh only shows what it would do")
+    pr.add_argument("--project", default=None, help="refresh only this project (must be in the registry)")
     pr.add_argument("--dry-run", action="store_true", help="same as omitting --yes (kept for compatibility)")
     pst = sub.add_parser("stats", help="per-project statistics: G1 safety, context graph, ledgers")
     pst.add_argument("--project", default=None, help="project root (default: current directory)")

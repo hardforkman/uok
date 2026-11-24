@@ -667,6 +667,19 @@ class RefreshSafetyTest(unittest.TestCase):
         self.assertFalse((self.proj / ".qoder" / "agents").exists(), "refresh must not install a new host")
         self.assertEqual([(e["host"]) for e in self.registry()], ["claude-code"])
 
+    def test_refresh_project_filter_touches_only_that_project(self):
+        other = self.tmp / "other"
+        other.mkdir()
+        self.write_registry([
+            {"project": str(self.proj), "host": "claude-code", "mode": "standard", "models": ""},
+            {"project": str(other), "host": "claude-code", "mode": "standard", "models": ""}])
+        r = self.uok(["refresh", "--project", str(self.proj)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(str(self.proj), r.stdout)
+        self.assertNotIn(str(other), r.stdout)
+        r = self.uok(["refresh", "--project", str(self.tmp / "not-registered")])
+        self.assertIn("not in the registry", r.stdout)
+
     def test_dev_repo_is_never_installed_into(self):
         dev = self.tmp / "dev"
         (dev / "release").mkdir(parents=True)
