@@ -97,6 +97,8 @@ or `not_found`. Treat this adapter as discovery-heavy: audit before binding.
 
 ## 11. Limitations
 
+- **Hook failure** [verified_doc 2026-11-17]: the hook entry sets `failClosed: true` (crash, timeout or no output blocks) and
+  `timeout: 120`; the command also ends in `|| exit 2`. Live probes b, c and /uok are still open (see the Cursor report).
 - Hook `ask` is documented but NOT honored live (Cursor 3.27.22, 2026-11-17):
   G1 returned the documented `{"permission": "ask"}` for `git push --force`,
   yet the host executed the command with no human prompt (twice). G1 therefore

@@ -114,6 +114,10 @@ to learn.chatgpt.com/docs — both are official; cite the final URL).
 
 ## 11. Limitations
 
+- **Hook failure is not documented as blocking in Codex** [verified_doc 2026-11-24: learn.chatgpt.com/docs/hooks]: for local command
+  hooks the docs give no outcome for a crash or timeout (cloud and MCP hooks are documented as non-blocking), default timeout 600 s,
+  and there is no fail-closed setting. The installer registers `python3 -I <guard> --format codex || exit 2` (exit 2 blocks) and
+  `timeout: 120`. Hook input has no subagent identity and `ask` is unsupported (the guard denies instead).
 - Subagent definition format not confirmed in reviewed docs ⇒ profile-based
   role sessions are the reliable fallback (record degradation if used).
 - `--full-auto` removed; older tutorials are stale — do not follow them.

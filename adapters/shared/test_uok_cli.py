@@ -58,7 +58,7 @@ class UokCliTest(unittest.TestCase):
             with self.subTest(host=host):
                 r = run_uok(["init", "--host", host, "--dry-run"], self.home, self.proj)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                self.assertIn(f"host={host}", r.stdout)
+                self.assertIn(f"hosts={host}", r.stdout)
                 self.assertIn("DRY RUN", r.stdout)
                 self.assertIn("orchestrator launcher skill", r.stdout)
                 self.assertFalse(any(Path(self.proj).iterdir()), "dry run wrote files")
@@ -81,7 +81,7 @@ class UokCliTest(unittest.TestCase):
         dispatch it back to the same adapter."""
         r = run_uok(["init", "--host", "dsh", "--project", str(self.proj)], self.home, self.proj)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("host=dsh", r.stdout)
+        self.assertIn("hosts=dsh", r.stdout)
         self.assertIn("Claude Code adapter", r.stdout)          # dispatched to the alias target
         self.assertTrue(os.path.exists(os.path.join(str(self.proj), "CLAUDE.md")))   # the layout DSH reads
         self.assertIn("UOK:BEGIN", open(os.path.join(str(self.proj), "CLAUDE.md"), encoding="utf-8").read())
@@ -95,14 +95,23 @@ class UokCliTest(unittest.TestCase):
     def test_init_auto_detects_host_from_env(self):
         r = run_uok(["init", "--dry-run"], self.home, self.proj, env_extra={"CLAUDECODE": "1"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("host=claude-code", r.stdout)
+        self.assertIn("hosts=claude-code", r.stdout)
 
-    def test_init_auto_ambiguous_requires_host(self):
+    def test_init_auto_plans_every_detected_environment(self):
         Path(self.proj, ".claude").mkdir()
         Path(self.proj, ".qoder").mkdir()
         r = run_uok(["init", "--dry-run"], self.home, self.proj)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("hosts=claude-code, qoder", r.stdout)
+        self.assertIn("init [claude-code]", r.stdout)
+        self.assertIn("init [qoder]", r.stdout)
+
+    def test_init_auto_without_any_environment_is_an_error(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
+        r = subprocess.run([sys.executable, UOK, "init", "--dry-run"], capture_output=True, text=True,
+                           env=dict(env, HOME=str(self.home)), cwd=str(self.proj), timeout=120)
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("--host", r.stderr)
+        self.assertIn("cannot detect any environment", r.stderr)
 
     def test_bootstrap_all_hosts_valid_skill(self):
         r = run_uok(["bootstrap", "--host", "all"], self.home, self.proj)
@@ -115,7 +124,8 @@ class UokCliTest(unittest.TestCase):
                 self.assertEqual(fm["name"], "uok-init")
                 self.assertIn("uok init", fm["description"])
                 self.assertIn(MARK, fm["description"])
-                self.assertIn(f"--host {host}", body)
+                self.assertIn("--host auto", body)   # all environments of the project
+                self.assertIn(f"this session is **{host}**", body)
                 self.assertIn("cat ~/.uok/location", body)   # path is read from the pointer, not embedded
                 self.assertIn("pyyaml", body)                # the PyYAML prerequisite note
                 self.assertIn("github.com/hardforkman/uok/issues", body)   # report instead of patching
@@ -511,7 +521,8 @@ class RefreshAndUpdaterTest(unittest.TestCase):
             [sys.executable, str(self.kit / "uok"), "refresh"], capture_output=True, text=True,
             env=self.env, cwd=str(self.tmp), timeout=900)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("skipping", r.stdout)
+        self.assertIn("skip", r.stdout)
+        self.assertIn("project directory missing", r.stdout)
 
     def test_refresh_with_empty_registry(self):
         r = self.kit_run(["refresh"])
@@ -593,6 +604,93 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         r = self.kit_run(["--version"])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("9.8.7", r.stdout)
+
+
+class RefreshSafetyTest(unittest.TestCase):
+    """uok must never be able to harm a project: refresh judges by the project's own files, never
+    installs anywhere new, never touches the kit's dev repo, and applies only with --yes."""
+
+    def setUp(self):
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
+        self.env.update(HOME=str(self.home), PYTHONDONTWRITEBYTECODE="1", UOK_UPDATE_CHECK="off")
+        self.proj = self.tmp / "proj"
+        self.proj.mkdir()
+
+    def uok(self, args, cwd=None):
+        return subprocess.run([sys.executable, UOK, *args], capture_output=True, text=True, env=self.env,
+                              cwd=str(cwd or self.proj), timeout=900)
+
+    def registry(self):
+        import json
+        p = self.home / ".uok" / "projects.json"
+        return json.loads(p.read_text())["projects"] if p.exists() else []
+
+    def write_registry(self, entries):
+        import json
+        (self.home / ".uok").mkdir(exist_ok=True)
+        (self.home / ".uok" / "projects.json").write_text(json.dumps({"projects": entries}))
+
+    def snapshot(self, root):
+        return {str(f.relative_to(root)): f.read_bytes() for f in Path(root).rglob("*") if f.is_file()}
+
+    def test_refresh_never_installs_where_nothing_is_installed(self):
+        (self.proj / "README.md").write_text("mine\n")
+        (self.proj / ".qoder").mkdir()
+        self.write_registry([{"project": str(self.proj), "host": "qoder", "mode": "standard", "models": ""}])
+        before = self.snapshot(self.proj)
+        for flags in ([], ["--yes"]):
+            r = self.uok(["refresh", *flags])
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("no kit install found", r.stdout)
+            self.assertEqual(self.snapshot(self.proj), before, f"refresh {flags} must not touch an un-installed project")
+
+    def test_refresh_dry_run_by_default_then_only_installed_hosts_and_registry_reconciled(self):
+        r = self.uok(["init", "--host", "claude-code", "--project", str(self.proj)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        (self.proj / ".qoder").mkdir()   # a Qoder config dir exists, the kit is NOT installed for it
+        skill = self.proj / ".claude" / "skills" / "uok" / "SKILL.md"
+        skill.write_text(skill.read_text() + "\nLOCAL-EDIT\n")
+        # the registry is wrong: it says qoder only
+        self.write_registry([{"project": str(self.proj), "host": "qoder", "mode": "standard", "models": ""}])
+        before = self.snapshot(self.proj)
+        r = self.uok(["refresh"])   # no --yes: nothing may change
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("nothing was changed", r.stdout)
+        self.assertEqual(self.snapshot(self.proj), before)
+        r = self.uok(["refresh", "--yes"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("LOCAL-EDIT", skill.read_text())   # the kit-managed file was re-applied
+        self.assertFalse((self.proj / ".qoder" / "agents").exists(), "refresh must not install a new host")
+        self.assertEqual([(e["host"]) for e in self.registry()], ["claude-code"])
+
+    def test_dev_repo_is_never_installed_into(self):
+        dev = self.tmp / "dev"
+        (dev / "release").mkdir(parents=True)
+        (dev / "release" / "release.sh").write_text("#!/bin/sh\n")
+        (dev / "UNIVERSAL-ORCHESTRATOR-KIT").mkdir()
+        (dev / "UNIVERSAL-ORCHESTRATOR-KIT" / "VERSION").write_text("1.0.0\n")
+        (dev / ".claude").mkdir()
+        before = self.snapshot(dev)
+        r = self.uok(["init", "--host", "claude-code", "--project", str(dev)], cwd=dev)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("development repository", r.stderr)
+        self.write_registry([{"project": str(dev), "host": "claude-code", "mode": "standard", "models": ""}])
+        r = self.uok(["refresh", "--yes"], cwd=dev)
+        self.assertIn("development repository", r.stdout)
+        self.assertEqual(self.snapshot(dev), before)
+
+    def test_init_auto_installs_every_environment_of_the_project(self):
+        (self.proj / ".qoder").mkdir()
+        (self.proj / ".claude").mkdir()
+        r = self.uok(["init", "--host", "auto", "--project", str(self.proj)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(list((self.proj / ".claude" / "agents").glob("uok-*.md")))
+        self.assertTrue(list((self.proj / ".qoder" / "agents").glob("uok-*.md")))
+        self.assertEqual(sorted(e["host"] for e in self.registry()), ["claude-code", "qoder"])
 
 
 if __name__ == "__main__":

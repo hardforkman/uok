@@ -62,7 +62,7 @@ class CursorInstaller(core.BaseInstaller):
             for event, matcher in EVENTS.items():
                 lst = hooks.setdefault(event, [])
                 lst[:] = [h for h in lst if "g1_guard.py" not in h.get("command", "")]
-                entry = {"command": cmd, "timeout": 30, "failClosed": True}
+                entry = {"command": cmd, "timeout": 120, "failClosed": True}
                 if matcher:
                     entry["matcher"] = matcher
                 lst.append(entry)

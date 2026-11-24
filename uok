@@ -33,10 +33,12 @@ bootstrap One-time per machine: registers a user-level `uok-init` skill so that 
           User-authored skills are never overwritten; kit-managed ones are backed up to
           ~/.uok/backups/<timestamp>/ before update.
 
-Host auto-detection is a heuristic (environment-variable prefixes, then project config
-dirs, then home config dirs); it is a convenience for terminal use only — the session
-skill always passes --host explicitly. Requires Python >= 3.10; init additionally needs
-PyYAML (used by the adapter installers).
+--host auto installs for EVERY environment the project is used from: the config folders it
+already has (.claude, .qoder, .cursor, .codex) plus the running session's host. Each host gets
+its own adapter; the plan (--dry-run) lists them. `init` refuses the kit's development
+repository. `refresh` is judged by the project's own installed files, never installs anywhere
+new, and only applies with --yes. Requires Python >= 3.10; init additionally needs PyYAML
+(used by the adapter installers).
 """
 import argparse
 import datetime
@@ -95,15 +97,51 @@ def detect_host(project):
     return None, []
 
 
-def resolve_host(requested, project):
+# Files only the kit's installers create. A host counts as INSTALLED in a project only if one of
+# these exists, so refresh never installs where nothing was installed and never trusts the registry alone.
+INSTALL_MARKERS = {
+    "claude-code": (".claude/agents/uok-*.md", ".claude/skills/uok/SKILL.md"),
+    "qoder": (".qoder/agents/uok-*.md", ".qoder/skills/uok/SKILL.md"),
+    "cursor": (".cursor/rules/uok-orchestrator.mdc", ".cursor/skills/uok/SKILL.md"),
+    "codex": (".codex/agents/uok_*.toml", ".agents/skills/uok/SKILL.md"),
+}
+
+
+def installed_hosts(project):
+    """Hosts the kit is actually installed for in this project (judged by the project's own files)."""
+    import glob
+    return [h for h in HOSTS
+            if any(glob.glob(os.path.join(project, pat)) for pat in INSTALL_MARKERS[h])]
+
+
+def detect_hosts(project):
+    """Every environment this project is used from: config dirs present in the project, plus the
+    host of the running session (environment variables). Order follows HOSTS."""
+    found = {h for h in HOSTS if os.path.isdir(os.path.join(project, PROJECT_DIR_MARKER[h]))}
+    found |= {h for h in HOSTS if any(k.startswith(ENV_PREFIX[h]) for k in os.environ)}
+    return [h for h in HOSTS if h in found]
+
+
+def is_dev_repo(project):
+    """The kit's own development repository: a kit must never be installed into it, otherwise the
+    dev copy would run projects/agents (releases are installed from the released kit instead)."""
+    if os.environ.get("UOK_ALLOW_DEV_INSTALL") == "1":
+        return False
+    return (os.path.isfile(os.path.join(project, "release", "release.sh"))
+            and os.path.isfile(os.path.join(project, "UNIVERSAL-ORCHESTRATOR-KIT", "VERSION")))
+
+
+def resolve_hosts(requested, project):
+    """--host auto  -> all detected environments; --host all -> every supported host; else the one given."""
+    if requested == "all":
+        return list(HOSTS)
     if requested != "auto":
-        return requested
-    host, ambiguous = detect_host(project)
-    if host:
-        return host
-    if ambiguous:
-        sys.exit(f"uok: several hosts look present ({', '.join(ambiguous)}); pass --host explicitly")
-    sys.exit("uok: cannot detect the host; pass --host claude-code|qoder|cursor|codex|dsh")
+        return [requested]
+    hosts = detect_hosts(project)
+    if not hosts:
+        sys.exit("uok: cannot detect any environment (no .claude/.qoder/.cursor/.codex in the project, "
+                 "no session host); pass --host claude-code|qoder|cursor|codex|dsh|all")
+    return hosts
 
 
 POINTER = os.path.join(os.path.expanduser("~"), ".uok", "location")
@@ -212,43 +250,92 @@ def cmd_init(a):
     project = os.path.realpath(a.project or os.getcwd())
     if not os.path.isdir(project):
         sys.exit(f"uok: project directory not found: {project}")
-    host = resolve_host(a.host, project)
-    models = a.models
-    if not models:
-        prev = next((e for e in load_registry()
-                     if (e.get("project"), e.get("host")) == (project, host)), None)
-        if prev and prev.get("models"):
-            models = prev["models"]
-            print(f"uok init: reusing models recorded for this project: {models}")
-    print(f"uok init: host={host}, project={project}, kit={KIT}")
+    if is_dev_repo(project):
+        sys.exit(f"uok: {project} is the kit's development repository; refusing to install into it "
+                 "(use the released kit on your projects; UOK_ALLOW_DEV_INSTALL=1 overrides for kit work)")
+    hosts = resolve_hosts(a.host, project)
+    print(f"uok init: project={project}, hosts={', '.join(hosts)}, kit={KIT}")
     if not a.dry_run:
         write_pointer()
-    rc = run_installer(project, host, a.mode, models, a.dry_run, a.graphify)
-    if rc == 0 and not a.dry_run:
-        record_project(project, host, a.mode, models, a.graphify)
-    return rc
+    worst = 0
+    for host in hosts:
+        models = a.models
+        if not models:
+            prev = next((e for e in load_registry()
+                         if (e.get("project"), e.get("host")) == (project, host)), None)
+            if prev and prev.get("models"):
+                models = prev["models"]
+                print(f"uok init [{host}]: reusing models recorded for this project: {models}")
+        print(f"uok init [{host}]")
+        rc = run_installer(project, host, a.mode, models, a.dry_run, a.graphify)
+        if rc == 0 and not a.dry_run:
+            record_project(project, host, a.mode, models, a.graphify)
+        worst = worst or rc
+    return worst
+
+
+def _policy_value(project, key, default):
+    for name in ("adapter.yaml", "claude-code.yaml"):
+        v = _scalar(os.path.join(project, ".orchestrator", "policy", name), key)
+        if v:
+            return v
+    return default
 
 
 def cmd_refresh(a):
+    """Re-apply the kit to projects it is ALREADY installed in. Safe by construction:
+    - the truth is the project's own files (INSTALL_MARKERS), not the registry: a registry entry for a
+      project with no install, a missing project, or the kit's dev repo is skipped, never installed;
+    - only the hosts actually installed in a project are refreshed, never new ones;
+    - dry-run unless --yes (the installers are additive and back up every file they change);
+    - the registry is reconciled to what is really installed."""
     entries = load_registry()
     if not entries:
         print(f"uok refresh: no projects recorded in {REGISTRY}; run `uok init` in a project first")
         return 0
-    write_pointer() if not a.dry_run else None
-    failed, done = [], 0
-    for e in entries:
-        project, host = e.get("project", ""), e.get("host", "")
-        if (host not in HOSTS and host not in ADAPTER_ALIAS) or not os.path.isdir(project):
-            print(f"uok refresh: skipping {project or '?'} ({host or '?'}): project missing or host unknown")
+    apply = a.yes and not a.dry_run
+    if apply:
+        write_pointer()
+    projects = list(dict.fromkeys(e.get("project", "") for e in entries))
+    failed, refreshed, reconciled = [], 0, []
+    for project in projects:
+        if not project or not os.path.isdir(project):
+            print(f"uok refresh: skip {project or '?'}: project directory missing")
             continue
-        print(f"uok refresh: {host} -> {project}")
-        if run_installer(project, host, e.get("mode", "standard"), e.get("models", ""), a.dry_run,
-                         e.get("graphify", "auto")) != 0:
-            failed.append(project)
-        else:
-            done += 1
-    print(f"uok refresh: {done} project(s) refreshed, {len(failed)} failed"
-          + (f": {', '.join(failed)}" if failed else "") + ("; restart each agent session." if done and not a.dry_run else ""))
+        if is_dev_repo(project):
+            print(f"uok refresh: skip {project}: kit development repository (never installed into)")
+            continue
+        hosts = installed_hosts(project)
+        if not hosts:
+            print(f"uok refresh: skip {project}: no kit install found there (refresh never installs)")
+            continue
+        prev = {e.get("host"): e for e in entries if e.get("project") == project}
+        # DSH uses the claude-code layout: a project recorded as "dsh" keeps that label.
+        labels = ["dsh" if (h == "claude-code" and "dsh" in prev and "claude-code" not in prev) else h
+                  for h in hosts]
+        for label in labels:
+            e = prev.get(label) or {}
+            mode = _policy_value(project, "enforcement", e.get("mode", "standard"))
+            print(f"uok refresh: {label} -> {project}" + ("" if apply else "  [dry-run]"))
+            rc = run_installer(project, label, mode, e.get("models", ""), not apply, e.get("graphify", "auto"))
+            if rc != 0:
+                failed.append(project)
+            else:
+                refreshed += 1
+                if apply:
+                    record_project(project, label, mode, e.get("models", ""), e.get("graphify", "auto"))
+        if apply:   # drop registry hosts that are not installed any more
+            stale = [h for h in prev if h not in labels]
+            if stale:
+                save_registry([x for x in load_registry()
+                               if not (x.get("project") == project and x.get("host") in stale)])
+                reconciled.append(f"{project}: dropped {', '.join(stale)}")
+    for line in reconciled:
+        print(f"uok refresh: registry reconciled: {line}")
+    print(f"uok refresh: {refreshed} install(s) {'refreshed' if apply else 'checked (dry-run)'}, {len(failed)} failed"
+          + (f": {', '.join(dict.fromkeys(failed))}" if failed else "")
+          + ("; restart each agent session." if apply and refreshed
+             else "; nothing was changed. Re-run with --yes to apply." if refreshed else ""))
     return 1 if failed else 0
 
 
@@ -258,7 +345,9 @@ name: uok-init
 description: "Install the Universal Orchestrator Kit into the current project {BOOT_MARK}. Use when the user types 'uok init' or {INIT_INVOKE[host]}, or asks to install or set up the orchestrator kit in this project."
 ---
 
-Install the Universal Orchestrator Kit (kit {KIT_VERSION}) into THIS project for **{host}**.
+Install the Universal Orchestrator Kit (kit {KIT_VERSION}) into THIS project, for every agent
+environment it is used from (this session is **{host}**; `--host auto` also covers any other
+environment whose config folder the project already has, each with its own adapter).
 The kit folder is recorded in `~/.uok/location` (read it with `cat ~/.uok/location`). If that
 path no longer exists, ask the user where the kit lives now and tell them to run `uok locate` from there.
 Requires Python >= 3.10 with PyYAML: if the default `python3` lacks it (`import yaml` fails),
@@ -266,7 +355,9 @@ run `pip3 install --user pyyaml` first, or invoke the commands below with a proj
 interpreter that has it — never guess, check.
 
 1. Show the plan first (use the session's current project root, quoted):
-   `python3 "$(cat ~/.uok/location)/uok" init --host {host} --project "<project root>" --dry-run`
+   `python3 "$(cat ~/.uok/location)/uok" init --host {"dsh" if host == "dsh" else "auto"} --project "<project root>" --dry-run`
+   The plan lists the hosts it will install for; refuse to proceed if it names a host the
+   user did not expect.
 2. Install: the same command without `--dry-run`, plus `--graphify install` to also set up
    the optional Graphify context graph (fetches the `graphifyy` CLI via uv/pipx if missing -
    network, user-level, reversible; builds a code-only graph fully offline; opt out with
@@ -282,7 +373,8 @@ interpreter that has it — never guess, check.
 Do not modify user-authored agents, skills or hooks — the installer preserves them.
 Kit discipline: never hand-write the kit's files (skills, hooks, role agents, policy) and
 never patch the kit folder — install and update only via the commands above (`uok init` /
-`refresh` / `bootstrap` / `updater.sh`); `refresh` silently overwrites local edits. If a
+`refresh` / `bootstrap` / `updater.sh`); `refresh` overwrites local edits in kit-managed files (it never installs anywhere new; run it
+without `--yes` first to see what it would do). If a
 kit file misbehaves, report it with a reproduction at github.com/hardforkman/uok/issues
 instead of patching.
 Do not perform sensitive operations (deploys, credential changes, publication).
@@ -603,15 +695,17 @@ def main():
     ap.add_argument("--version", action="version", version=f"uok release {release_version()} (kit spec {KIT_VERSION})")
     sub = ap.add_subparsers(dest="cmd", required=True)
     pi = sub.add_parser("init", help="install the kit into a project (primary installation path)")
-    pi.add_argument("--host", choices=("auto",) + HOSTS + tuple(ADAPTER_ALIAS), default="auto")
+    pi.add_argument("--host", choices=("auto", "all") + HOSTS + tuple(ADAPTER_ALIAS), default="auto",
+                    help="auto = every environment detected in the project and the running session; all = every host")
     pi.add_argument("--project", default=None, help="project root (default: current directory)")
     pi.add_argument("--mode", choices=("standard", "strict"), default="standard")
     pi.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= selectors for the host")
     pi.add_argument("--graphify", choices=("auto", "install", "off"), default="auto",
                     help="Graphify context graph: auto=use CLI if on PATH (no network), install=also fetch via uv/pipx, off=skip")
     pi.add_argument("--dry-run", action="store_true")
-    pr = sub.add_parser("refresh", help="re-apply the kit to every project recorded by init")
-    pr.add_argument("--dry-run", action="store_true")
+    pr = sub.add_parser("refresh", help="re-apply the kit to projects it is already installed in (dry-run unless --yes)")
+    pr.add_argument("--yes", action="store_true", help="apply; without it refresh only shows what it would do")
+    pr.add_argument("--dry-run", action="store_true", help="same as omitting --yes (kept for compatibility)")
     pst = sub.add_parser("stats", help="per-project statistics: G1 safety, context graph, ledgers")
     pst.add_argument("--project", default=None, help="project root (default: current directory)")
     pst.add_argument("--json", action="store_true", help="machine-readable JSON instead of text")

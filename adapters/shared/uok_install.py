@@ -87,7 +87,10 @@ HOOK_PATH_EXPR = '"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.orchestr
 
 
 def hook_command(fmt):
-    return f"python3 -I {HOOK_PATH_EXPR} --format {fmt}"
+    # `|| exit 2`: if the guard crashes or python3 is missing, exit 2 = the host BLOCKS the call.
+    # Qoder and Codex document any other non-zero exit as non-blocking (the action proceeds) and have
+    # no fail-closed setting; Cursor also treats 2 as deny. The guard itself exits 0 for every decision.
+    return f"python3 -I {HOOK_PATH_EXPR} --format {fmt} || exit 2"
 
 
 def roles():

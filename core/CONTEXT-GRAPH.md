@@ -46,7 +46,7 @@ every edge tagged `EXTRACTED` or `INFERRED`. The kit stays fully functional with
   `schema_version`, `nodes`, `built_at`, `verification`. The installer never claims live
   host behaviour it did not observe. Graphify releases frequently (0.9.x): the recorded
   version is the one actually probed; upgrades are a human decision
-  (`uv tool upgrade graphifyy`, then `uok refresh`).
+  (`uv tool upgrade graphifyy`, then `uok refresh --yes`).
 
 ## Install / opt-out
 

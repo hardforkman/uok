@@ -74,7 +74,7 @@ class CodexInstaller(core.BaseInstaller):
         def mutate(d):
             groups = d.setdefault("hooks", {}).setdefault("PreToolUse", [])
             groups[:] = [g for g in groups if not any("g1_guard.py" in h.get("command", "") for h in g.get("hooks", []))]
-            groups.append({"matcher": MATCHER, "hooks": [{"type": "command", "command": cmd, "timeout": 30,
+            groups.append({"matcher": MATCHER, "hooks": [{"type": "command", "command": cmd, "timeout": 120,
                                                           "statusMessage": "UOK G1 guard"}]})
         self.merge_json(self.p(".codex", "hooks.json"), mutate, "PreToolUse G1 hook (merged)")
 

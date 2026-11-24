@@ -125,6 +125,12 @@ Instruction/memory files [verified_doc: docs.qoder.com/cli/memory]:
 
 ## 11. Limitations
 
+- **Hook failure is non-blocking in Qoder** [verified_doc 2026-11-24: docs.qoder.com/cli/hooks, hooks-reference]: exit
+  codes other than 2 are "non-blocking error; the main flow continues", the timeout outcome is not documented, default timeout 600 s,
+  and there is no fail-closed setting. The installer therefore registers the command as `python3 -I <guard> --format qoder || exit 2`
+  (a crash or missing python3 blocks the call) and sets `timeout: 120`. A guard that merely hangs past the timeout is not
+  covered: keep the machine's load in mind. `agent_type` is not documented for PreToolUse (worker-only rules stay instructions
+  unless a live probe shows it).
 - Nesting depth limit: unknown (not in docs) — flatten.
 - Model tiers are abstract selectors; exact underlying models are not
   exposed → registry cost/latency metadata stays `unknown` unless measured;

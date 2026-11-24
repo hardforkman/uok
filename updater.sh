@@ -127,12 +127,12 @@ fi
 VERSION_NOW="$(cat "$KIT_DIR/VERSION" 2>/dev/null || true)"
 note "updated to $LABEL${VERSION_NOW:+ (kit $VERSION_NOW)} at $(git -C "$KIT_DIR" rev-parse --short HEAD)."
 if [ "$REFRESH" -eq 1 ]; then
-    command -v python3 >/dev/null 2>&1 || die "python3 is required to refresh projects (re-run later: python3 \"$KIT_DIR/uok\" refresh)"
-    python3 "$KIT_DIR/uok" refresh
+    command -v python3 >/dev/null 2>&1 || die "python3 is required to refresh projects (re-run later: python3 \"$KIT_DIR/uok\" refresh --yes)"
+    python3 "$KIT_DIR/uok" refresh --yes   # running the updater IS the human decision to refresh
     # Keep the user-level skills (~/.claude/skills, ~/.dsh/skills, ...) on the same release
     # as the projects — otherwise their embedded kit version drifts behind every update.
     python3 "$KIT_DIR/uok" bootstrap \
         || note "user-level skill update skipped (no host config dirs found in ~; run bootstrap manually with --host)"
 else
-    note "projects not refreshed (--no-refresh). Run: python3 \"$KIT_DIR/uok\" refresh"
+    note "projects not refreshed (--no-refresh). Run: python3 \"$KIT_DIR/uok\" refresh --yes"
 fi

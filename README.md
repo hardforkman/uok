@@ -64,7 +64,7 @@ flow — the launcher skill spells this out honestly).
 
 ```bash
 bash ~/uok/updater.sh --check        # what would come, changes nothing
-bash ~/uok/updater.sh                # update to the latest RELEASE (tag vX.Y.Z) + refresh all projects
+bash ~/uok/updater.sh                # update to the latest RELEASE (tag vX.Y.Z) + refresh installed projects
 bash ~/uok/updater.sh --edge         # follow the main branch (unreleased work)
 bash ~/uok/updater.sh --no-refresh   # update the kit folder only
 python3 ~/uok/uok --version          # which release is installed
@@ -91,8 +91,15 @@ Live checks per host are documented in `handoff/LIVE-CHECKS.md` and recorded in
 review (`handoff/HUMAN-REVIEW-G1.md`).
 
 Found a bug? Reproduce it with a command and [open an issue](https://github.com/hardforkman/uok/issues) —
-don't patch kit files by hand: `uok refresh` re-applies the kit from its source and
-silently overwrites local edits.
+don't patch kit files by hand: `uok refresh --yes` re-applies the kit from its source and
+overwrites local edits in kit-managed files.
+
+**`uok` cannot harm a project it was not installed in.** `uok refresh` judges by the project's own
+files, never by the registry alone: it refreshes only the environments the kit is already installed
+for, never installs into a project or environment that has none, never touches the kit's own
+development repository, and applies only with `--yes` (without it, it only shows what it would do).
+`uok init --host auto` installs every environment the project is used from (`.claude`, `.qoder`,
+`.cursor`, `.codex` plus the running session), each with its own adapter.
 
 ## Documentation
 

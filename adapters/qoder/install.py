@@ -65,7 +65,7 @@ class QoderInstaller(core.BaseInstaller):
         def mutate(d):
             groups = d.setdefault("hooks", {}).setdefault("PreToolUse", [])
             ours = [g for g in groups if any("g1_guard.py" in h.get("command", "") for h in g.get("hooks", []))]
-            entry = {"matcher": MATCHER, "hooks": [{"type": "command", "command": cmd, "timeout": 30}]}
+            entry = {"matcher": MATCHER, "hooks": [{"type": "command", "command": cmd, "timeout": 120}]}
             if ours:
                 ours[0].clear(); ours[0].update(entry)
             else:
