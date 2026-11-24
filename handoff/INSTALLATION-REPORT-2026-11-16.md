@@ -8,7 +8,7 @@ reports from the template after installing.
 
 ## 1. Identity
 
-- Deliverable: `UNIVERSAL-ORCHESTRATOR-KIT/` at `/Users/snm/UNIORK/`
+- Deliverable: `UNIVERSAL-ORCHESTRATOR-KIT/` at `/path/to/project/`
 - Authoring environment: Qoder Desktop agent session (macOS, Python 3.12.2,
   PyYAML 6.0.2). The kit itself is application-independent (ARCH-04).
 - Kit version: 1.0.0 · Protocol schema version: 1 · Policy version: 1.0.0
@@ -108,7 +108,7 @@ changes ⇒ new schema_version.
 
 | Adapter | Maturity (2026-11-17) | Basis |
 |---------|----------|------------------------------|
-| claude-code | integration_tested | Installed in /Users/snm/UNIORK; live checks 1–12 executed by a fresh Claude Code session (agent dispatch, model aliases, restricted shell, claim enforcement, independent review) — see INSTALLATION-REPORT-claude-code-2026-11-17.md. Not production-hardened; human review still required for sensitive work |
+| claude-code | integration_tested | Installed in /path/to/project; live checks 1–12 executed by a fresh Claude Code session (agent dispatch, model aliases, restricted shell, claim enforcement, independent review) — see INSTALLATION-REPORT-claude-code-2026-11-17.md. Not production-hardened; human review still required for sensitive work |
 | qoder | integration_tested | Live inside Qoder Desktop 2026-11-17: `uok init` primary path, `/uok` launcher, worker dispatch, SEC-02/04 denials, full SEC-07 human-approval round-trip, claims + parallel writers (LC-04), read-only research-analyst — all LIVE-CHECKS items a–e passed (INSTALLATION-REPORT-qoder-2026-11-17.md); model selectors unverified |
 | cursor | implementation_available | Same installer test basis; `preToolUse` input fields unverified; not yet live inside Cursor |
 | codex | implementation_available | Same installer test basis (apply_patch parsing, ask→deny); not yet live inside Codex |

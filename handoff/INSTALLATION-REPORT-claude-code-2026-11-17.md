@@ -3,7 +3,7 @@
 Kit version: 1.0.0 · Spec version: 1.0.0 · Date: 2026-11-17
 
 ## Environment
-Claude Code (desktop app, Code tab), macOS, Python 3.12.2, PyYAML 6.0.2. Project root `/Users/snm/UNIORK` (not a git repo). No pre-existing `.claude/`, `CLAUDE.md`, or project settings → nothing to back up or merge. `claude` CLI not on PATH (headless mode not probed).
+Claude Code (desktop app, Code tab), macOS, Python 3.12.2, PyYAML 6.0.2. Project root `/path/to/project` (not a git repo). No pre-existing `.claude/`, `CLAUDE.md`, or project settings → nothing to back up or merge. `claude` CLI not on PATH (headless mode not probed).
 
 ## Changes
 - Kit fix: `validation/behavior_tests.py` TS-10 `granted_cross_project` now passes the grant through a receiver-held registry (kernel correctly ignores envelope-embedded grants, ISO-04); added negative check that an embedded-only grant is rejected. Kernel unchanged.
@@ -20,14 +20,14 @@ Claude Code (desktop app, Code tab), macOS, Python 3.12.2, PyYAML 6.0.2. Project
 - Claim-ledger enforcement: implemented in G1 (`.orchestrator/claims/active.json`); tested locally (in-claim allow; out-of-claim / other's claim deny). Live: a real subagent PreToolUse event carries `agent_type` (observed in hook log, `verified_live`), so enforcement keys on it.
 - Restricted shell: `uok-*` agents limited to `policy/project.yaml` `shell_allowlist`, no redirection/substitution/chaining outside allowlist; tested locally.
 - Reviewer independence: code/security reviewers now `fable` vs implementers haiku/sonnet/opus (model-level). Same provider family remains; human review for critical work is stated in CLAUDE.md.
-- Live dispatch of `uok-*` agents: BLOCKED in the installing session (agent registry loads at session start; `uok-research-analyst` not found). Needs a new session in /Users/snm/UNIORK, then `/agents` check and one read-only dispatch. Alias `fable` also unverified.
+- Live dispatch of `uok-*` agents: BLOCKED in the installing session (agent registry loads at session start; `uok-research-analyst` not found). Needs a new session in /path/to/project, then `/agents` check and one read-only dispatch. Alias `fable` also unverified.
 
 ## Remaining
 Live dispatch of uok-* (restart required), permission rules, worktrees, MCP, headless not configured. Maturity stays `implementation_available` until the live dispatch passes.
 
 ## Live verification
 
-Date: 2026-11-17, fresh Claude Code session in /Users/snm/UNIORK (orchestrator model: Sonnet 5.5). All results below were observed by dispatching the `uok-*` subagents and reading `.orchestrator/audit/g1.log`.
+Date: 2026-11-17, fresh Claude Code session in /path/to/project (orchestrator model: Sonnet 5.5). All results below were observed by dispatching the `uok-*` subagents and reading `.orchestrator/audit/g1.log`.
 
 | # | Check | Result | Evidence |
 |---|-------|--------|----------|
@@ -115,7 +115,7 @@ Final maturity: claude-code adapter `integration_tested`; all 10 roles, aliases 
 
 - CLI found (not on PATH): `~/Library/Application Support/Claude/claude-code/2.1.325/.../claude`, version 2.1.325. `--help` lists `-p/--print`, `--agent`, `--agents`, `--mcp-config`, `-w/--worktree` (`verified_local`, help text only).
 - Headless run `claude -p ... --model haiku`: binary starts, but returns "Not logged in · Please run /login" (the desktop app manages auth for its own sessions). Headless NOT verified; needs the user to log the CLI in.
-- Worktree: `/Users/snm/UNIORK` is not a git repo, so `--worktree` / subagent worktree isolation cannot run here without `git init` (needs user approval). Not tested.
+- Worktree: `/path/to/project` is not a git repo, so `--worktree` / subagent worktree isolation cannot run here without `git init` (needs user approval). Not tested.
 - MCP: uok-* agents have explicit `tools:` allowlists without MCP tools (by design, SEC-04); G1 matcher does not cover `mcp__*` tools in the main session. Not live-tested.
 
 ## MCP / worktree / headless (continued, 2026-11-17)
@@ -123,7 +123,7 @@ Final maturity: claude-code adapter `integration_tested`; all 10 roles, aliases 
 | Area | Change | Result |
 |---|---|---|
 | MCP | Hook matcher now includes `mcp__.*`; G1 denies MCP payloads with secret-like content (SEC-03) and any MCP call from a `uok-*` agent (SEC-04). | Local: secret payload deny, clean call allow, uok MCP call deny (`verified_local`). Live: real main-session MCP call `mcp__ccd_turn__update_plan` logged by G1 as `allow: [main]` (`verified_live`). Registry listing of `uok-*` agents shows no MCP tools (`verified_live`). |
-| Worktree | Claim matching treats `.claude/worktrees/<name>/…` as repo-relative, so claims hold inside worktrees. | Scratch git repo + `git worktree add .claude/worktrees/w1`: claimed path allow; unclaimed deny; main into worker claim deny; outside repo deny (`verified_local`). Native Claude Code worktree isolation (`--worktree` / subagent isolation) NOT run: `/Users/snm/UNIORK` is not a git repo. |
+| Worktree | Claim matching treats `.claude/worktrees/<name>/…` as repo-relative, so claims hold inside worktrees. | Scratch git repo + `git worktree add .claude/worktrees/w1`: claimed path allow; unclaimed deny; main into worker claim deny; outside repo deny (`verified_local`). Native Claude Code worktree isolation (`--worktree` / subagent isolation) NOT run: `/path/to/project` is not a git repo. |
 | Headless | none | `claude -p` (CLI 2.1.325) returns "Not logged in · Please run /login". NOT verified; needs the CLI to be logged in. |
 
 Kit tests after these changes: self_test 16/16, behavior_tests 29/29.
@@ -132,13 +132,13 @@ Remaining: native worktree run (needs `git init` in UNIORK or a git project), he
 
 ## Native worktree isolation (live, 2026-11-17)
 
-`git init` in /Users/snm/UNIORK (user-approved), two commits. Fix found: `.orchestrator/.gitignore` ignored `*`, so `hooks/` and `policy/` were not tracked and would be missing in worktrees; now only `tasks/ audit/ claims/ routing/` are ignored. `.claude/worktrees/` added to root `.gitignore`.
+`git init` in /path/to/project (user-approved), two commits. Fix found: `.orchestrator/.gitignore` ignored `*`, so `hooks/` and `policy/` were not tracked and would be missing in worktrees; now only `tasks/ audit/ claims/ routing/` are ignored. `.claude/worktrees/` added to root `.gitignore`.
 
 Probe: `uok-implementation-engineer` dispatched with Claude Code worktree isolation, claim `probe/a/*`.
 
 | Event | Expected | Actual (g1.log) |
 |---|---|---|
-| agent cwd | inside `.claude/worktrees/` | `/Users/snm/UNIORK/.claude/worktrees/agent-…`, own branch |
+| agent cwd | inside `.claude/worktrees/` | `/path/to/project/.claude/worktrees/agent-…`, own branch |
 | Write `probe/a/x.txt` in worktree | allow | `allow: [uok-implementation-engineer] Write …/probe/a/x.txt` |
 | Write `src/y.txt` in worktree | deny (LC-04) | `deny: … write outside … claimed paths (LC-04): src/y.txt` |
 

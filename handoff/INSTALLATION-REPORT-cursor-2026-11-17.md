@@ -14,7 +14,7 @@ are marked `not_executed`. Failed probes are listed as findings.
   23.2.0, Python 3.12.2, PyYAML 6.0.2
 - Target project(s) (`project_id`): `/private/tmp/uok-live-test` (scratch;
   `project.yaml` `project_id: "uok-live-test"`). Not a git repository.
-- Kit version installed: 1.0.0 at `/Users/snm/UNIORK/UNIVERSAL-ORCHESTRATOR-KIT`
+- Kit version installed: 1.0.0 at `/path/to/project/UNIVERSAL-ORCHESTRATOR-KIT`
 - Installer (agent identity) and supervising human: Cursor Agent (this
   session) ran `adapters/cursor/install.py`; supervising human: the user who
   pasted LIVE-CHECKS.md (Cursor prompt)
@@ -72,7 +72,7 @@ are marked `not_executed`. Failed probes are listed as findings.
   - `AGENTS.md`: UOK marked section host `qoder` → `cursor`; workers line now
     describes `@uok-role-<role>` rules. Backup: `.orchestrator/backups/20261117-200602/AGENTS.md`
   - `.orchestrator/policy/adapter.yaml`: `host: cursor`. Backup under `20261117-200602/`
-  - First installer attempt without `--project` dry-ran into `/Users/snm/UNIORK`
+  - First installer attempt without `--project` dry-ran into `/path/to/project`
     (installer default = kit parent). Live install used `--project /private/tmp/uok-live-test`.
   - First real install in the Cursor sandbox failed with
     `PermissionError: ... '/private/tmp/uok-live-test/.cursor'`; succeeded with

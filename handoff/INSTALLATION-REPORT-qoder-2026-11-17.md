@@ -18,7 +18,7 @@ remain unverified (configuration gap, not a probe).
 - Receiving agent: Qoder Desktop (standalone app), interactive chat session,
   macOS darwin 23.2.0, Python 3.12.2, PyYAML 6.0.2
 - Target project: `/tmp/uok-live-test` (scratch, created empty for this test)
-- Kit version installed: 1.0.0 (kit at `/Users/snm/UNIORK/UNIVERSAL-ORCHESTRATOR-KIT`)
+- Kit version installed: 1.0.0 (kit at `/path/to/project/UNIVERSAL-ORCHESTRATOR-KIT`)
 - Installer: `uok` CLI via the `uok-init` skill; supervising human: user (approved
   bootstrap explicitly; install target agreed in the test plan)
 
