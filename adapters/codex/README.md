@@ -1,6 +1,6 @@
 # Adapter: Codex (OpenAI — CLI / IDE / cloud)
 
-Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: implementation_available
+Kit version: 1.0.0 · Spec version: 1.0.0 · Maturity: integration_tested (hook, agents and skill live 2026-11-24; interactive /hooks review, MCP and parallel claims not run)
 Research date: 2026-11-16 · Sources: developers.openai.com/codex (308-redirects
 to learn.chatgpt.com/docs — both are official; cite the final URL).
 
@@ -114,6 +114,11 @@ to learn.chatgpt.com/docs — both are official; cite the final URL).
 
 ## 11. Limitations
 
+- **An untrusted project runs with NO guard.** Codex disables project-local configuration until the project's `.codex/` layer is trusted
+  (`codex exec` prints "Untrusted project-local configuration is disabled"); the G1 hook is then not loaded and actions such as
+  `git push --force` or writes outside the project run unchecked [verified_live 2026-11-24]. Trust the project (`codex exec --trust` or
+  the interactive prompt) and review the hook with `/hooks` before relying on the guard. `-c projects.<path>.trust_level=...` did not
+  enable trust in the headless run.
 - **Hook failure is not documented as blocking in Codex** [verified_doc 2026-11-24: learn.chatgpt.com/docs/hooks]: for local command
   hooks the docs give no outcome for a crash or timeout (cloud and MCP hooks are documented as non-blocking), default timeout 600 s,
   and there is no fail-closed setting. The installer registers `python3 -I <guard> --format codex || exit 2` (exit 2 blocks) and

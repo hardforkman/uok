@@ -691,6 +691,10 @@ def cmd_stats(a):
 
 
 def main():
+    try:   # keep our lines in order with the installers' output when stdout is a pipe or a file
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
     ap = argparse.ArgumentParser(prog="uok", description=__doc__.strip().splitlines()[0])
     ap.add_argument("--version", action="version", version=f"uok release {release_version()} (kit spec {KIT_VERSION})")
     sub = ap.add_subparsers(dest="cmd", required=True)

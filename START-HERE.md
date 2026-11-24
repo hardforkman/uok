@@ -48,7 +48,7 @@ it performs directive steps 8-12 for you (additive, idempotent, with backups):
 | Claude Code | `python3 adapters/claude-code/install.py` | integration_tested (live, 2026-11-17) |
 | Qoder | `python3 adapters/qoder/install.py` | integration_tested (live, 2026-11-17) |
 | Cursor | `python3 adapters/cursor/install.py` | implementation_available (installer tested; live checks pending) |
-| Codex | `python3 adapters/codex/install.py` | implementation_available (installer tested; live checks pending) |
+| Codex | `python3 adapters/codex/install.py` | integration_tested (hook, agents, skill live 2026-11-24; see handoff report for what was not run) |
 | other | none: follow the directive with `adapters/universal/README.md`; build your own adapter using `adapters/claude-code` and `adapters/qoder` (integration_tested) as reference implementations | specification_complete |
 
 **Primary install path: `uok init`.** Once per machine, run

@@ -9,10 +9,12 @@ capabilities:
     evidence: https://learn.chatgpt.com/docs/codex/cli
     fallback: null
   custom_agents:
-    status: verified_doc
+    status: verified_live
     native_mechanism: '.codex/agents/*.toml: name, description, developer_instructions, optional model;
       sandbox/approval not per agent'
-    evidence: https://learn.chatgpt.com/docs/agent-configuration/subagents (2026-11-17)
+    evidence: >-
+      Codex 0.171.0-alpha.13.2 (codex exec) listed all 10 uok_* agents and the uok skill, 2026-11-24;
+      https://learn.chatgpt.com/docs/agent-configuration/subagents (2026-11-17)
     fallback: profile_scoped_role_sessions
   per_agent_model_selection:
     status: verified_doc
@@ -36,10 +38,14 @@ capabilities:
     evidence: not confirmed this session
     fallback: resource_lock
   blocking_hooks:
-    status: verified_doc
-    native_mechanism: PreToolUse in .codex/hooks.json; tool_name Bash/apply_patch/mcp__*; permissionDecision
-      deny only (ask unsupported); trust via /hooks; no subagent identity
-    evidence: https://learn.chatgpt.com/docs/hooks (2026-11-17)
+    status: verified_live
+    native_mechanism: >-
+      PreToolUse in .codex/hooks.json; tool_name Bash/apply_patch/mcp__*; permissionDecision deny only
+      (ask unsupported); trust via /hooks; no subagent identity. LIVE 2026-11-24 (0.171.0-alpha.13.2),
+      project .codex/ layer trusted: the guard ran, ls allowed, apply_patch outside the root denied (ISO-02),
+      git push --force denied with a "the human must run it" reason. With an UNTRUSTED project Codex disables
+      project-local config and the hook does not run at all (actions pass unchecked).
+    evidence: handoff/INSTALLATION-REPORT-codex-2026-11-24.md ; https://learn.chatgpt.com/docs/hooks (2026-11-17)
     fallback: orchestrator_pre_dispatch_checks
   permission_modes:
     status: verified_doc
@@ -53,7 +59,7 @@ capabilities:
     evidence: https://learn.chatgpt.com/docs/codex/cli
     fallback: null
   headless_invocation:
-    status: verified_doc
+    status: verified_live
     native_mechanism: codex exec [--json] [--sandbox] [--skip-git-repo-check] [--profile]
     evidence: https://learn.chatgpt.com/docs/non-interactive-mode ; config reference
     fallback: null

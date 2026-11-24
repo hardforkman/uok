@@ -83,7 +83,9 @@ class CodexInstaller(core.BaseInstaller):
                  "tool_input": {"command": "*** Begin Patch\n*** Add File: .env\n+X=1\n*** End Patch"}}, '"deny"')
 
     def next_steps(self):
-        return ("next: open the project in Codex, trust the project `.codex/` layer, review and trust the G1 hook with "
+        return ("IMPORTANT: until the project's `.codex/` layer is trusted Codex disables project config, so the G1 guard "
+                "does NOT run and nothing is checked (verified live). "
+                "next: open the project in Codex, trust the project `.codex/` layer, review and trust the G1 hook with "
                 "`/hooks`, then run the live checks in the adapter README and fill "
                 f"{self.kit_rel}/handoff/INSTALLATION-REPORT-TEMPLATE.md. "
                 "Launch orchestration with the `$uok` skill mention.")
