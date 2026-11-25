@@ -129,11 +129,12 @@ Flags (identical for all installers):
   YOUR account. The installer does not validate them: pass what you see in
   your environment's interface;
 - `--dry-run` — show the changes without writing;
-- `--graphify auto|install|off` — the Graphify context graph: `auto` (the
-  default) enables the integration only if the CLI is already on PATH (no
-  network); `install` additionally installs the CLI via uv/pipx (this is what
-  the `/uok-init` skill does); `off` — skip. Rules CG-01…07:
-  `core/CONTEXT-GRAPH.md`.
+- `--graphify auto|install|off` — the Graphify context graph, part of the base
+  install: `uok init` defaults to `install` (fetches the CLI via uv/pipx if it
+  is missing; needs network, degrades to `degraded_context_graph` if that
+  fails); `auto` enables the integration only if the CLI is already on PATH (no
+  network; the default of a direct installer run); `off` — skip. `uok refresh`
+  and the updater never fetch. Rules CG-01…07: `core/CONTEXT-GRAPH.md`.
 
 What gets created:
 
@@ -188,6 +189,13 @@ RECEIVED → ANALYZED → CLASSIFIED → DECOMPOSED → DEPENDENCIES_RESOLVED
 → ROUTED → APPROVED_IF_REQUIRED → EXECUTING → VALIDATING
 → COMPLETED / FAILED / ESCALATED
 ```
+
+**Orchestration is the default.** After installation every engineering task
+goes through this cycle without any command: only the roles the task needs are
+used, available skills that raise correctness are used, and token economy never
+limits what an agent may read. These are instructions in the host's instruction
+file, not a hook, so a model can miss them — `/uok` remains the explicit
+launcher. Rules and per-host status: `core/AUTOPILOT.md`.
 
 **Quick launch — the `/uok` skill shortcut.** The installer creates it
 automatically:

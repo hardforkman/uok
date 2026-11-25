@@ -77,7 +77,9 @@ class GraphifyIntegrationTest(unittest.TestCase):
         return (self.proj / rel).read_text(encoding="utf-8")
 
     def test_auto_without_cli_degrades_honestly(self):
-        r = self.init(with_cli=False)
+        plan = self.init(with_cli=False, extra=("--dry-run",))          # default mode is install
+        self.assertIn("will FETCH `graphifyy`", plan.stdout, plan.stdout + plan.stderr)
+        r = self.init(with_cli=False, extra=("--graphify", "auto"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("degraded_context_graph", r.stdout)
         self.assertIn("enabled: false", self.read(".orchestrator/policy/graphify.yaml"))
@@ -175,10 +177,13 @@ class GraphifyIntegrationTest(unittest.TestCase):
     def test_registry_and_refresh_keep_integration(self):
         self.init()
         reg = json.loads((self.home / ".uok/projects.json").read_text())["projects"]
-        self.assertEqual(reg[0]["graphify"], "auto")
-        r = subprocess.run([sys.executable, UOK, "refresh"], capture_output=True, text=True,
+        self.assertEqual(reg[0]["graphify"], "install")          # `uok init` default
+        r = subprocess.run([sys.executable, UOK, "refresh", "--yes"], capture_output=True, text=True,
                            cwd=str(self.tmp), env=self.env(), timeout=900)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        plan = subprocess.run([sys.executable, UOK, "refresh"], capture_output=True, text=True,
+                              cwd=str(self.tmp), env=self.env(with_cli=False), timeout=900)
+        self.assertNotIn("will FETCH", plan.stdout)              # refresh never fetches
         self.assertIn("enabled: true", self.read(".orchestrator/policy/graphify.yaml"))
 
 

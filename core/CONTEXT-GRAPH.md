@@ -50,9 +50,10 @@ every edge tagged `EXTRACTED` or `INFERRED`. The kit stays fully functional with
 
 ## Install / opt-out
 
-    uok init                      # auto: integrate if the graphify CLI is on PATH (no network)
-    uok init --graphify install   # also fetch the CLI via uv/pipx (the /uok-init skill uses this)
+    uok init                      # default `install`: fetch the CLI via uv/pipx if missing
+    uok init --graphify auto      # integrate only if the CLI is already on PATH (no network)
     uok init --graphify off       # skip the integration entirely
+                                  # `uok refresh` / updater.sh never fetch
     uv tool install graphifyy     # manual CLI install (Python >= 3.11; uv manages its own)
     graphify hook install         # optional: auto-rebuild on commit/checkout (human choice)
 

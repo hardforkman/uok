@@ -29,6 +29,7 @@ Usage guide in Russian: [USAGE-GUIDE-RU.md](USAGE-GUIDE-RU.md).
 | 9 | [protocols/TASK-CONTRACT.md](protocols/TASK-CONTRACT.md), [protocols/AGENT-PROTOCOL.md](protocols/AGENT-PROTOCOL.md), [protocols/HANDOFF-CONTRACT.md](protocols/HANDOFF-CONTRACT.md) | Machine-readable contracts |
 | 10 | [adapters/ADAPTER-IMPLEMENTATION-SPEC.md](adapters/ADAPTER-IMPLEMENTATION-SPEC.md) + your environment's adapter | Native integration |
 | 11 | [templates/](templates/) | Project / model / agent configuration |
+| — | [core/AUTOPILOT.md](core/AUTOPILOT.md) | Default orchestration, skills, full context |
 | 12 | [validation/SELF-TEST.md](validation/SELF-TEST.md) | Run the checks |
 | 13 | [AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md](AUTONOMOUS-IMPLEMENTATION-DIRECTIVE.md) | **Receiving agents: execute this** |
 | 14 | [handoff/INSTALLATION-REPORT-TEMPLATE.md](handoff/INSTALLATION-REPORT-TEMPLATE.md) | Report your results |
@@ -59,6 +60,7 @@ The same CLI works in a terminal: `python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init -
 
 Direct installer invocation remains available. Run each installer with `--dry-run` first.
 All of them share `adapters/shared/` (installer core + G1 hook).
+After installation orchestration applies to every task by default (`core/AUTOPILOT.md`).
 Every installer also creates a launcher skill: run `/uok <task>` (Claude Code, Qoder, Cursor) or the
 `$uok` mention (Codex) to start orchestration; see USAGE-GUIDE-RU §6.1 and your adapter README §12-13.
 Start the argument with a role id (`/uok research-analyst <task>`) to call one agent, with `all` to run the

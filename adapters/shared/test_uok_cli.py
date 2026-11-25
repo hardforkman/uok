@@ -27,13 +27,19 @@ GLOBAL_DIR = {"claude-code": ".claude/skills", "qoder": ".qoder/skills",
 MARK = "(Universal Orchestrator Kit bootstrap)"
 
 
+def no_fetch(args):
+    """`uok init` defaults to fetching Graphify; tests never touch the network."""
+    args = list(args)
+    return args + ["--graphify", "auto"] if args[:1] == ["init"] and "--graphify" not in args else args
+
+
 def run_uok(args, home, cwd, env_extra=None):
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("CLAUDE", "QODER", "CURSOR", "CODEX"))}
     env.update(HOME=home, PYTHONDONTWRITEBYTECODE="1")
     if env_extra:
         env.update(env_extra)
-    return subprocess.run([sys.executable, UOK] + args, capture_output=True, text=True,
+    return subprocess.run([sys.executable, UOK] + no_fetch(args), capture_output=True, text=True,
                           cwd=cwd, env=env, timeout=600)
 
 
@@ -333,7 +339,7 @@ class SharedKitRelocationTest(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.home), PYTHONDONTWRITEBYTECODE="1")
 
     def run_kit(self, kit, args, cwd):
-        return subprocess.run([sys.executable, str(kit / "uok"), *args], capture_output=True, text=True,
+        return subprocess.run([sys.executable, str(kit / "uok"), *no_fetch(args)], capture_output=True, text=True,
                               env=self.env, cwd=str(cwd), timeout=900)
 
     def pointer(self):
@@ -395,7 +401,7 @@ class RefreshAndUpdaterTest(unittest.TestCase):
         return r.stdout
 
     def kit_run(self, args):
-        return subprocess.run([sys.executable, str(self.kit / "uok"), *args], capture_output=True, text=True,
+        return subprocess.run([sys.executable, str(self.kit / "uok"), *no_fetch(args)], capture_output=True, text=True,
                               env=self.env, cwd=str(self.proj), timeout=900)
 
     def registry(self):

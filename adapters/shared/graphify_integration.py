@@ -6,8 +6,8 @@ Community integration - not affiliated with or endorsed by Graphify Labs.
 Graphify is Apache-2.0 (github.com/Graphify-Labs/graphify); the kit invokes its CLI
 (PyPI package `graphifyy`, double-y) and never vendors its code. Rules: core/CONTEXT-GRAPH.md.
 
-Modes (--graphify): auto (default, PATH only, no network) | install (also fetch via
-uv/pipx; the /uok-init skill passes this) | off. When enabled: project-scoped host skill
+Modes (--graphify): install (default of `uok init`: fetch the CLI via uv/pipx if missing) |
+auto (default of a direct installer run and of refresh: PATH only, no network) | off. When enabled: project-scoped host skill
 (soft hooks, never --strict), .graphifyignore aligned with G1 secret globs (CG-05),
 code-only offline graph (GRAPHIFY_BACKEND=none), policy/graphify.yaml, and `context_graph`
 in the adapter yaml read by g1_guard.py. Every claim carries an honest verification status.
@@ -181,9 +181,11 @@ def apply(inst):
         if exe:
             inst.changes.append("graphify: install host skill (project, soft hooks), build code-only graph (offline)")
             inst.context_graph = "graphify"
+        elif mode == "install":
+            inst.changes.append("graphify: CLI not on PATH - will FETCH `graphifyy` via uv/pipx "
+                                "(network, user-level; skip with --graphify off)")
         else:
-            inst.changes.append("graphify: CLI not on PATH - would record degraded_context_graph (auto) "
-                                "or fetch it via uv/pipx (--graphify install)")
+            inst.changes.append("graphify: CLI not on PATH - would record degraded_context_graph (auto: no network)")
         write_policy(inst, bool(exe), None, {}, 0, planned=True)
         return
     ver = probe_version(exe) if exe else None

@@ -18,6 +18,10 @@ supported host, in minutes.
 - **11 worker roles** (`uok-*`) with one-line launch: `/uok <task>` (Claude Code, Qoder,
   Cursor, DSH) or `$uok <task>` (Codex). Single role: `/uok research-analyst <task>`; all
   roles: `/uok all <task>`; roster: `/uok roles`.
+- **On by default**: after installation agents are instructed to run every engineering
+  task through the orchestrator without a command: only the needed roles, with the skills that
+  raise correctness, and no token-economy limit on what they may read ([`core/AUTOPILOT.md`](core/AUTOPILOT.md);
+  instruction-level, not a hook).
 - **Cost-aware routing**: every task is classified (`core/TASK-CLASSIFICATION.md`) into
   CAT-01…08 and routed to the cheapest sufficient tier TIER-1…TIER-5
   (`core/routing-policy.yaml`). No silent escalation; review is TIER-5 and never a
@@ -33,7 +37,7 @@ supported host, in minutes.
   states plainly what is not measured. No invented benefit numbers.
 - **Parallel workers with disjoint write claims**, independent review for high-impact work,
   human approval for production deploys and publication.
-- **Optional context graph**: with [Graphify](https://github.com/Graphify-Labs/graphify)
+- **Context graph**, part of the base install (`--graphify off` skips it): with [Graphify](https://github.com/Graphify-Labs/graphify)
   installed, roles orient by querying a code-only graph instead of reading files one by one;
   claims are derived from the impact subgraph. Fully offline (`GRAPHIFY_BACKEND=none`),
   fail-open, and community-built — **not affiliated with or endorsed by Graphify Labs**
@@ -82,8 +86,8 @@ behind the release; user files are never touched, backups go to `.orchestrator/b
 ## How it is verified
 
 The kit ships its own validation: `validation/self_test.py` (16 structural checks),
-`validation/behavior_tests.py` (63 behavior checks incl. the graph-aware routing scenario
-TS-13), `adapters/shared/hooks/test_g1_guard.py` (129 hook tests),
+`validation/behavior_tests.py` (64 behavior checks incl. the graph-aware routing scenario
+TS-13), `adapters/shared/hooks/test_g1_guard.py` (136 hook tests),
 `adapters/shared/test_install_skill.py`, `adapters/shared/test_uok_cli.py` and
 `adapters/shared/test_graphify_integration.py` — all six run before every release.
 Live checks per host are documented in `handoff/LIVE-CHECKS.md` and recorded in

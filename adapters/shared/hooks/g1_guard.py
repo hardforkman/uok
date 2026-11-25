@@ -168,6 +168,9 @@ PROTECTED = (".claude/", ".qoder/", ".cursor/", ".codex/", ".agents/", ".git/", 
 # File names protected at any depth (nested CLAUDE.md files are loaded as instructions; round 6, item 3).
 PROTECTED_NAMES = ("claude.md", "claude.local.md", "agents.md", "agents.local.md", ".mcp.json", "settings.json",
                    "settings.local.json", "hooks.json", ".graphifyrc", ".graphifyignore")
+# a nested or home skill/agent folder is loaded by the host too, so a worker must not create one
+HOST_DIR_NESTED = re.compile(r"/\.(claude|qoder|cursor|codex|agents)/")
+HOST_DIR_HOME = re.compile(r"/\.(claude|qoder|cursor|codex|agents)/(skills|commands|agents|hooks|plugins)/")
 NO_READ_FOR_UOK = (".orchestrator/audit/", ".orchestrator/claims/", ".git/")
 # Roles whose AGENT-CAPABILITIES permissions say sensitive_ops: approval_required.
 APPROVAL_ROLES = {"uok-senior-engineer", "uok-release-integration"}
@@ -473,7 +476,9 @@ def check_path(tool, agent, path):
         if not inside_root(path) and not in_host_state(agent, path):
             decide("deny", f"write outside project root blocked (ISO-02): {resolve(path)!r}")
         if agent.startswith("uok-") and (any((rel(path).lower() + "/").startswith(p) for p in PROTECTED)
-                                        or os.path.basename(rel(path)).lower() in PROTECTED_NAMES):
+                                        or os.path.basename(rel(path)).lower() in PROTECTED_NAMES
+                                        or (HOST_DIR_NESTED.search("/" + rel(path).lower()) if inside_root(path)
+                                            else HOST_DIR_HOME.search(resolve(path).lower()))):
             decide("deny", f"{agent}: write to guard controls blocked (SEC-04): {rel(path)!r}")
         check_claims(agent, path)
 
@@ -483,6 +488,48 @@ def segments(cmd):
 
 
 GRAPHIFY_READ_ONLY = {"query", "path", "explain", "section", "--version", "--help"}
+
+
+KIT_SKILLS = {"uok", "uok-init", "graphify"}   # install, refresh or rebuild what workers may not change
+
+
+def forked_skill(name):
+    """True if a project or user skill declares `context: fork`: it would run outside the worker's rules."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
+        return False
+    for base in (REAL_ROOT, os.path.expanduser("~")):
+        for rel_path in (("skills", name, "SKILL.md"), ("commands", name + ".md")):
+            try:
+                with open(os.path.join(base, ".claude", *rel_path), encoding="utf-8", errors="replace") as f:
+                    head = f.read(65536).lstrip("\ufeff")
+            except OSError:
+                continue
+            if not head.startswith("---"):
+                continue
+            parts = head.split("\n---", 1)
+            if len(parts) < 2:                       # unterminated or oversized frontmatter: fail closed
+                return True
+            if re.search(r"(?m)^['\"]?context['\"]?[ \t]*:[ \t]*['\"]?fork\b", parts[0]):
+                return True
+    return False
+
+
+def check_skill(agent, inp):
+    name = inp.get("skill") or inp.get("command") or ""
+    if not isinstance(name, str) or not name.strip():
+        decide("deny", f"{agent}: Skill call without a skill name (SEC-04)")
+    name = name.strip().lstrip("/").split()[0]
+    CTX["skill"] = name[:80]
+    if agent.startswith("uok-"):
+        if STRICT:
+            decide("deny", f"{agent}: strict mode workers have no Skill tool; the orchestrator passes the "
+                           "skill text in the brief (SEC-04)")
+        if name.split(":")[-1].lower() in KIT_SKILLS:
+            decide("deny", f"{agent}: skill {name[:80]!r} installs or rebuilds kit state; "
+                           "main session or human only (CG-04/SEC-04)")
+        if forked_skill(name):
+            decide("deny", f"{agent}: skill {name[:80]!r} forks into another agent, outside this role's "
+                           "rules; ask the orchestrator (SEC-04)")
 
 
 def graphify_mutation(cmd):
@@ -551,7 +598,7 @@ def main():
     if not isinstance(tool, str) or not isinstance(agent, str):
         raise TypeError("tool_name/agent_type must be strings")
     if not isinstance(inp, dict):
-        if tool in WRITE_TOOLS or tool.startswith("mcp__") or (tool == "Bash" and agent.startswith("uok-")):
+        if tool in WRITE_TOOLS or tool.startswith("mcp__") or (tool in ("Bash", "Skill") and agent.startswith("uok-")):
             decide("deny", f"tool_input is not an object for a security-relevant tool; failing closed")
         log(f"fail-open: tool_input is not an object ({tool})")
         return
@@ -571,6 +618,8 @@ def main():
     if tool in PATH_TOOLS:
         for p in paths:  # every path key present is checked (M3)
             check_path(tool, agent, p)
+    if tool == "Skill":
+        check_skill(agent, inp)
     if tool.startswith("mcp__"):
         if STRICT and uok:  # before the scan, so no input shape can skip it (M1)
             decide("deny", f"{agent}: MCP tools are not in uok role allowlists (SEC-04)")
@@ -603,13 +652,14 @@ def main():
             decide("deny", f"{agent}: sensitive operation '{sensitive}' is not permitted for this role (SEC-07)")
         if sensitive:
             decide("ask", f"sensitive operation '{sensitive}' requires human approval (SEC-07)")
-    log(f"allow: [{CTX['agent']}] {tool} {paths[0]!r}" if paths else f"allow: [{CTX['agent']}] {tool}")
+    target = paths[0] if paths else CTX.get("skill") if tool == "Skill" else None
+    log(f"allow: [{CTX['agent']}] {tool} {target!r}" if target else f"allow: [{CTX['agent']}] {tool}")
 
 
 def security_relevant():
     t, a = CTX["tool"], CTX["agent"]
     uok = a.startswith("uok-")
-    return (STRICT and uok) or t in WRITE_TOOLS or t.startswith("mcp__") or (t == "Bash" and uok)
+    return (STRICT and uok) or t in WRITE_TOOLS or t.startswith("mcp__") or (t in ("Bash", "Skill") and uok)
 
 
 if __name__ == "__main__":

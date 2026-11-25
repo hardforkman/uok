@@ -155,6 +155,65 @@ class SkillStepTest(unittest.TestCase):
         self.assertEqual(mod.parse_models("review=opus")["review"], "opus")
 
 
+class AutopilotRulesTest(unittest.TestCase):
+    """core/AUTOPILOT.md: every host gets default orchestration, skills and full-context rules."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="uok-autopilot-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def build(self, host, mode="standard", graph="none"):
+        cls, models = load_installer(host)
+        root = tempfile.mkdtemp(dir=self.root)
+        inst = cls(root, mode, models, False)
+        inst.context_graph = graph
+        if host == "claude-code":
+            inst.step_agents()
+            inst.step_claude_md()
+        else:
+            inst.host_steps()
+        return {str(p.relative_to(root)): p.read_text(encoding="utf-8")
+                for p in Path(root).rglob("*") if p.is_file()}
+
+    def test_every_host_has_section_and_role_rules(self):
+        for host in HOSTS:
+            with self.subTest(host=host):
+                files = self.build(host)
+                doc = files["CLAUDE.md" if host == "claude-code" else "AGENTS.md"]
+                for marker in ("**Default for every task**", "**Skills:**", "never trimmed", "**Hand-off:**"):
+                    self.assertIn(marker, doc)
+                self.assertNotIn("Graph first", doc)
+                roles = [t for n, t in files.items() if "uok" in n and ("agents/" in n or "uok-role-" in n)]
+                self.assertEqual(len(roles), 10)
+                for text in roles:
+                    self.assertIn("- Skills: use every available skill", text)
+                    self.assertIn("- Full context:", text)
+
+    def test_graph_handoff_only_with_graphify(self):
+        for host in HOSTS:
+            with self.subTest(host=host):
+                files = self.build(host, graph="graphify")
+                self.assertIn("Graph first", files["CLAUDE.md" if host == "claude-code" else "AGENTS.md"])
+
+    def test_launcher_says_default(self):
+        for host, (rel, _) in HOSTS.items():
+            inst = load_installer(host)[0](self.root, "standard", load_installer(host)[1], False)
+            inst.step_skill()
+            self.assertIn("also the default", Path(self.root, rel).read_text(encoding="utf-8"))
+
+    def test_claude_skill_calls_are_guarded(self):
+        cls = load_installer("claude-code")[0]
+        self.assertIn("|Skill|", cls.step_settings.__globals__["HOOK_MATCHER"])
+
+    def test_claude_skill_tool_standard_only(self):
+        for mode, expected in (("standard", True), ("strict", False)):
+            files = self.build("claude-code", mode=mode)
+            for name, text in files.items():
+                if name.startswith(".claude/agents/"):
+                    tools = [t.strip() for t in frontmatter(text)[0]["tools"].split(",")]
+                    self.assertEqual("Skill" in tools, expected, f"{mode}: {name}")
+
+
 class MarkedSectionRepairTest(unittest.TestCase):
     """Regression for the 2026-11-20 CLAUDE.md corruption: repeated installs accumulated
     duplicate UOK sections (first-index cutting) and left an orphaned END marker. The

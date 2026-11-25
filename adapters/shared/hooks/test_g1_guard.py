@@ -756,6 +756,66 @@ class G1GuardTest(unittest.TestCase):
         self.assertIn("refused", self._search(".+.+.+.+@@"))
 
 
+class SkillCallTest(unittest.TestCase):
+    """Skill tool calls of uok-* workers (core/AUTOPILOT.md AP-02), standard mode."""
+    MODE = "standard"
+    setUp = G1GuardTest.setUp
+    run_full, run_event, run_event_full = G1GuardTest.run_full, G1GuardTest.run_event, G1GuardTest.run_event_full
+    audit_log = G1GuardTest.audit_log
+
+    def skill(self, name, frontmatter, base=None, bom=""):
+        d = os.path.join(base or self.root, ".claude", "skills", name)
+        os.makedirs(d)
+        with open(os.path.join(d, "SKILL.md"), "w", encoding="utf-8") as f:
+            f.write(bom)
+            f.write(f"---\nname: {name}\n{frontmatter}---\nbody: context: fork\n")
+
+    def test_worker_may_use_ordinary_skill_and_it_is_audited(self):
+        self.skill("writing", "description: d\n")
+        self.assertEqual(self.run_event("Skill", {"skill": "writing"}, "uok-test-engineer"), "allow")
+        self.assertIn("'writing'", self.audit_log())
+
+    def test_worker_denied_kit_and_forked_skills(self):
+        self.skill("forker", "context: fork\nagent: general-purpose\n")
+        for name in ("uok", "uok-init", "/graphify", "some-plugin:uok-init", "forker", ""):
+            with self.subTest(name=name):
+                self.assertEqual(self.run_event("Skill", {"skill": name}, "uok-code-reviewer"), "deny")
+
+    def test_fork_found_with_bom_quoted_key_home_and_command(self):
+        self.skill("bom", "context: fork\n", bom="\ufeff")
+        self.skill("quoted", '"context": fork\n')
+        self.skill("long", "description: " + "x" * 70000 + "\ncontext: fork\n")
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home, True)
+        self.skill("athome", "context: fork\n", base=home)
+        os.makedirs(os.path.join(self.root, ".claude", "commands"))
+        with open(os.path.join(self.root, ".claude", "commands", "cmd.md"), "w") as f:
+            f.write("---\ncontext: fork\n---\n")
+        for name in ("bom", "quoted", "long", "athome", "cmd", "UOK-Init"):
+            with self.subTest(name=name):
+                decision = self.run_event_full("Skill", {"skill": name}, "uok-test-engineer",
+                                               {"HOME": home, "USERPROFILE": home})[0]
+                self.assertEqual(decision, "deny")
+
+    def test_command_key_and_non_object_input(self):
+        self.assertEqual(self.run_event("Skill", {"command": "uok"}, "uok-test-engineer"), "deny")
+        self.assertEqual(self.run_event("Skill", "uok", "uok-test-engineer"), "deny")
+
+    def test_worker_cannot_create_nested_skill(self):
+        for rel_path in ("src/.claude/skills/x/SKILL.md", "a/b/.agents/skills/x/SKILL.md"):
+            with self.subTest(path=rel_path):
+                self.assertEqual(self.run_event("Write", {"file_path": os.path.join(self.root, rel_path),
+                                                          "content": "x"}, "uok-implementation-engineer"), "deny")
+
+    def test_strict_worker_denied(self):
+        with open(os.path.join(self.root, ".orchestrator", "policy", "claude-code.yaml"), "w") as f:
+            f.write("enforcement: strict\nkit_dir: \"UNIVERSAL-ORCHESTRATOR-KIT\"\n")
+        self.assertEqual(self.run_event("Skill", {"skill": "writing"}, "uok-test-engineer"), "deny")
+
+    def test_main_session_unrestricted(self):
+        self.assertEqual(self.run_event("Skill", {"skill": "uok-init"}), "allow")
+
+
 class StandardModeTest(G1GuardTest):
     """`enforcement: standard` (default): base protections only; workers keep normal tools."""
     MODE = "standard"

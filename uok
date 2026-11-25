@@ -3,7 +3,7 @@
 
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok init [--host auto|claude-code|qoder|cursor|codex|dsh]
           [--project DIR] [--mode standard|strict] [--models tier1=..,tier2=..,tier3=..,review=..]
-          [--graphify auto|install|off] [--dry-run]
+          [--graphify install|auto|off] [--dry-run]   (default: install)
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok bootstrap [--host auto|all|claude-code|qoder|cursor|codex]
           [--dry-run]
   python3 UNIVERSAL-ORCHESTRATOR-KIT/uok refresh [--dry-run]
@@ -323,7 +323,9 @@ def cmd_refresh(a):
             e = prev.get(label) or {}
             mode = _policy_value(project, "enforcement", e.get("mode", "standard"))
             print(f"uok refresh: {label} -> {project}" + ("" if apply else "  [dry-run]"))
-            rc = run_installer(project, label, mode, e.get("models", ""), not apply, e.get("graphify", "auto"))
+            # refresh (also run unattended by updater.sh) never fetches from the network: only init does
+            graphify = "off" if e.get("graphify") == "off" else "auto"
+            rc = run_installer(project, label, mode, e.get("models", ""), not apply, graphify)
             if rc != 0:
                 failed.append(project)
             else:
@@ -364,8 +366,8 @@ interpreter that has it — never guess, check.
    `python3 "$(cat ~/.uok/location)/uok" init --host {"dsh" if host == "dsh" else "auto"} --project "<project root>" --dry-run`
    The plan lists the hosts it will install for; refuse to proceed if it names a host the
    user did not expect.
-2. Install: the same command without `--dry-run`, plus `--graphify install` to also set up
-   the optional Graphify context graph (fetches the `graphifyy` CLI via uv/pipx if missing -
+2. Install: the same command without `--dry-run`. The Graphify context graph is part of the base
+   install (default `--graphify install`: fetches the `graphifyy` CLI via uv/pipx if missing -
    network, user-level, reversible; builds a code-only graph fully offline; opt out with
    `--graphify off`). It is additive and idempotent; backups go to `.orchestrator/backups/`.
    If the user gives real model selectors for this host, pass them with
@@ -710,8 +712,9 @@ def main():
     pi.add_argument("--project", default=None, help="project root (default: current directory)")
     pi.add_argument("--mode", choices=("standard", "strict"), default="standard")
     pi.add_argument("--models", default="", help="tier1=,tier2=,tier3=,review= selectors for the host")
-    pi.add_argument("--graphify", choices=("auto", "install", "off"), default="auto",
-                    help="Graphify context graph: auto=use CLI if on PATH (no network), install=also fetch via uv/pipx, off=skip")
+    pi.add_argument("--graphify", choices=("auto", "install", "off"), default="install",
+                    help="Graphify context graph (part of the base install): install=default, fetch the CLI via uv/pipx "
+                         "if missing; auto=use it only if present (no network); off=skip")
     pi.add_argument("--dry-run", action="store_true")
     pr = sub.add_parser("refresh", help="re-apply the kit to projects it is already installed in (dry-run unless --yes)")
     pr.add_argument("--yes", action="store_true", help="apply; without it refresh only shows what it would do")

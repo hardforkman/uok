@@ -51,7 +51,7 @@ live checks to run afterwards.
 
 `install.py` generates `.claude/agents/uok-<role>.md` from `core/AGENT-CAPABILITIES.yaml`:
 - `name` = role id, `description` = responsibilities + "(Universal Orchestrator Kit role)" marker;
-- `tools` from role permissions (read-only roles get no Write/Edit; `shell: none` → no Bash);
+- `tools` from role permissions (read-only roles get no Write/Edit; `shell: none` → no Bash; standard mode adds `Skill`, checked by G1);
 - `model` from the tier binding; the body holds responsibilities, outputs, validation and
   operating rules (envelope scope, SEC-05 injection resistance, evidence).
 A file of the same name without the marker is user-authored: the installer leaves it alone and

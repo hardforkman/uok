@@ -30,7 +30,7 @@ The hook reads mode settings from `.orchestrator/policy/adapter.yaml` (Qoder, Cu
 
 `.claude/settings.json`, event `PreToolUse`:
 
-- matcher: `Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*`
+- matcher: `Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|Bash|Skill|mcp__.*`
 - command: `python3 -I "$CLAUDE_PROJECT_DIR/.orchestrator/hooks/g1_guard.py"`, `timeout: 30`
 
 The hook never returns `allow` explicitly. When all checks pass, it exits silently with code 0, and the decision is left to the `permissions` rules in `settings.json` and the session mode. `deny` blocks the call; `ask` shows a human prompt.
